@@ -1,0 +1,38 @@
+﻿namespace GedcomParser
+{
+    public enum EventType
+    {
+        Generic,
+        Adoption,
+        Baptism,
+        BarMitzvah,
+        BasMitzvah,
+        Birth,
+        Blessing,
+        Burial,
+        Census,
+        Christening,
+        AdultChristening,
+        Confirmation,
+        Cremation,
+        Death,
+        Emigration,
+        FirstCommunion,
+        Graduation,
+        Immigration,
+        Naturalization,
+        Ordination,
+        Probate,
+        Retirement,
+        Will,
+        Annulment,
+        Divorce,
+        DivorceFiled,
+        Engagement,
+        MarriageBann,
+        MarriageContract,
+        MarriageLicense,
+        Marriage,
+        MarriageSettlement
+    }
+}
