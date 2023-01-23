@@ -48,19 +48,19 @@ namespace GedcomParser
 
         private static StructureBase Factory(Stack<StructureBase> stack, GedcomReader reader)
         {
-            if (reader.Tag == "INDI")
-                return new Person(reader.XRef);
-            else if (reader.Tag == "NAME" && stack.Peek().Tag == "INDI")
-                return new PersonName(reader.Value);
-            else if (Event.TryGetEventType(reader.Tag, out var eventType))
-                return new Event(eventType);
-            else if (reader.Tag == "DATE")
-                return new DateStructure(reader.Value);
-            else if (reader.Tag == "TIME")
-                return new TimeStructure(reader.Value);
-            else if (reader.Tag == "PHRASE")
-                return new PhraseStructure(reader.Value);
-            else
+            //if (reader.Tag == "INDI")
+            //    return new Person(reader.XRef);
+            //else if (reader.Tag == "NAME" && stack.Peek().Tag == "INDI")
+            //    return new PersonName(reader.Value);
+            //else if (Event.TryGetEventType(reader.Tag, out var eventType))
+            //    return new Event(eventType);
+            //else if (reader.Tag == "DATE")
+            //    return new DateStructure(reader.Value);
+            //else if (reader.Tag == "TIME")
+            //    return new TimeStructure(reader.Value);
+            //else if (reader.Tag == "PHRASE")
+            //    return new PhraseStructure(reader.Value);
+            //else
                 return new Structure(reader.Tag
                     , reader.XRef
                     , reader.ValueIsPointer ? (object)new Pointer(reader.Value) : reader.Value);
