@@ -29,7 +29,7 @@ namespace GedcomParser
             var raw = _reader.ReadLine();
             if (raw == null)
                 return false;
-            Initialize(raw);
+            Initialize(raw.TrimStart());
             return true;
         }
 
@@ -38,7 +38,7 @@ namespace GedcomParser
             var raw = await _reader.ReadLineAsync();
             if (raw == null)
                 return false;
-            Initialize(raw);
+            Initialize(raw.TrimStart());
             return true;
         }
 
@@ -81,13 +81,17 @@ namespace GedcomParser
                 {
                     if (Value[1] == '@')
                     {
-                        Value = Value.Substring(1);
+                        Value = Value.Substring(1).Replace("@@", "@");
                     }
                     else
                     {
                         Value = Value.Substring(1, Value.Length - 2);
                         ValueIsPointer = true;
                     }
+                }
+                else
+                {
+                    Value = Value.Replace("@@", "@");
                 }
             }
         }

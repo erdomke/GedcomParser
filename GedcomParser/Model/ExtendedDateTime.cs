@@ -289,7 +289,7 @@ namespace GedcomParser
         public override string ToString()
         {
             if (Precision == YearPrecision.NoValue)
-                return "";
+                return "?";
 
             var result = "";
             if (Certainty == DateCertainty.About)

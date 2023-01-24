@@ -62,7 +62,7 @@ namespace GedcomParser
         public string ToString(string format, IFormatProvider formatProvider)
         {
             if (Type == DateRangeType.Unknown)
-                return "";
+                return "?";
             else if (Type == DateRangeType.Date)
             {
                 return Start.ToString(format, formatProvider);
