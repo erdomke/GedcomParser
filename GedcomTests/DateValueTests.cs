@@ -55,7 +55,7 @@ namespace GedcomTests
         [DataRow("03 Nov 1952", "1952-11-03")]
         [DataRow("1950", "1950")]
         [DataRow("7 Feb 1932", "1932-02-07")]
-        [DataRow("Before 1951", "../1951")]
+        [DataRow("Before 1951", "< 1951")]
         [DataRow("Abt 1968", "1968~")]
         [DataRow("1964/2008", "1964/2008")]
         [DataRow("2004-06/2006-08", "2004-06/2006-08")]
