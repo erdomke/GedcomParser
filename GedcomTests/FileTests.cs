@@ -19,11 +19,9 @@ namespace GedcomTests
         {
             var dirParts = TestContext.TestDeploymentDir.Replace('\\', '/').Split('/');
             var baseDir = string.Join("/", dirParts, 0, Array.IndexOf(dirParts, "bin"));
+            //var filePath = @"C:\Users\erdomke\Downloads\D Family Tree(3).ged";
             var filePath = Path.Combine(baseDir, "Files", "TGC551.ged");
             var structure = GStructure.Load(filePath);
-
-            var families = structure.Children("FAM").Select(c => new Family(c)).ToList();
-            var individuals = structure.Children("INDI").Select(c => new Individual(c)).ToList();
 
             Assert.AreEqual(@"Submitter address line 1
 Submitter address line 2

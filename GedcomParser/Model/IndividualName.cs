@@ -26,37 +26,5 @@ namespace GedcomParser.Model
         }
         public string NameSuffix { get; set; }
         public Dictionary<string, IndividualName> Translations { get; } = new Dictionary<string, IndividualName>();
-
-        public IndividualName() { }
-
-        public IndividualName(GStructure structure)
-        {
-            Name = (PersonName)structure;
-
-            var type = structure.Child("TYPE");
-            if (type != null)
-            {
-                if (Enum.TryParse<NameType>((string)type ?? "Other", true, out var nameType))
-                {
-                    Type = nameType;
-                    _typeString = (string)type.Child("PHRASE");
-                }
-                else
-                {
-                    _typeString = (string)type;
-                    Type = NameType.Other;
-                }
-            }
-            NamePrefix = (string)structure.Child("NPFX");
-            GivenName = (string)structure.Child("GIVN");
-            Nickname = (string)structure.Child("NICK");
-            SurnamePrefix = (string)structure.Child("SPFX");
-            Surname = (string)structure.Child("SURN");
-            NameSuffix = (string)structure.Child("NSFX");
-            foreach (var tran in structure.Children("TRAN"))
-            {
-                Translations.Add((string)tran.Child("LANG"), new IndividualName(tran));
-            }
-        }
     }
 }

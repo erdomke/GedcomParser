@@ -1,23 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace GedcomParser.Model
 {
-    public class Family
+    public class Family : IPrimaryObject
     {
-        public string Id { get; set; }
-        public List<string> Parents { get; } = new List<string>();
-        public List<string> Children { get; } = new List<string>();
-
-        public Family() { }
-
-        public Family(GStructure structure)
-        {
-            Id = structure.Id;
-            Parents.AddRange(structure.Children().Where(c => c.Tag == "HUSB" || c.Tag == "WIFE").Select(c => c.Pointer));
-            Children.AddRange(structure.Children("CHIL").Select(c => c.Pointer));
-        }
+        public Identifiers Id { get; } = new Identifiers();
+        public List<Event> Events { get; } = new List<Event>();
     }
 }

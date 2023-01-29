@@ -69,6 +69,13 @@ namespace GedcomParser
             }
             else if (format == "s" || format == "u")
             {
+                if (Type == DateRangeType.Range)
+                {
+                    if (!Start.HasValue)
+                        return "< " + End.ToString(format, formatProvider);
+                    else if (!End.HasValue)
+                        return "> " + Start.ToString(format, formatProvider);
+                }
                 return (!Start.HasValue ? ".." : Start.ToString(format, formatProvider))
                     + "/"
                     + (!End.HasValue ? ".." : End.ToString(format, formatProvider));
