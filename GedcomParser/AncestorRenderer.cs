@@ -197,6 +197,11 @@ namespace GedcomParser
                 var individual = database.GetValue<Individual>(Id);
                 Name = individual.Name.Name;
                 Dates = $"{individual.BirthDate.ToString("s")} - {individual.DeathDate.ToString("s")}";
+                if (individual.BirthDate.TryGetDiff(individual.DeathDate, out var minAge, out var maxAge))
+                {
+                    var age = (minAge.Years + maxAge.Years) / 2;
+                    Dates = age.ToString() + "y, " + Dates;
+                }
                 Width = Math.Max(sizer(fontName, 16, Name), sizer(fontName, 12, Dates));
                 return this;
             }

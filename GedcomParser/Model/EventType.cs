@@ -33,6 +33,7 @@
         MarriageContract,
         MarriageLicense,
         Marriage,
-        MarriageSettlement
+        MarriageSettlement,
+        Residence
     }
 }

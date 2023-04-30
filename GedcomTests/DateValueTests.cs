@@ -1,5 +1,6 @@
 using GedcomParser;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System;
 
 namespace GedcomTests
 {
@@ -80,6 +81,34 @@ namespace GedcomTests
         {
             var value = ExtendedDateRange.Parse(original);
             Assert.AreEqual(expected, value.ToString("s"));
+        }
+
+        [TestMethod]
+        public void ExtendedTimeSpan()
+        {
+            var tests = new[]
+            {
+                new { From = new DateTime(1900, 1, 1), To = new DateTime(1900, 1, 1), Result = 0 },
+                new { From = new DateTime(1900, 1, 1), To = new DateTime(1900, 1, 2), Result = 0 },
+                new { From = new DateTime(1900, 1, 2), To = new DateTime(1900, 1, 1), Result = 0 },
+                new { From = new DateTime(1900, 1, 1), To = new DateTime(1900, 2, 1), Result = 1 },
+                new { From = new DateTime(1900, 2, 1), To = new DateTime(1900, 1, 1), Result = -1 },
+                new { From = new DateTime(1900, 1, 31), To = new DateTime(1900, 2, 1), Result = 0 },
+                new { From = new DateTime(1900, 8, 31), To = new DateTime(1900, 9, 30), Result = 1 },
+                new { From = new DateTime(1900, 8, 31), To = new DateTime(1900, 10, 1), Result = 1 },
+                new { From = new DateTime(1900, 1, 1), To = new DateTime(1901, 1, 1), Result = 12 },
+                new { From = new DateTime(1900, 1, 1), To = new DateTime(1911, 1, 1), Result = 132 },
+                new { From = new DateTime(1900, 8, 31), To = new DateTime(1901, 8, 30), Result = 11 },
+            };
+
+            foreach (var test in tests)
+            {
+                Assert.AreEqual(test.Result, new DateTimeSpan(test.From, test.To).FullMonths, $"{test.To} - {test.From}");
+            }
+
+            //var success = ExtendedDateRange.Parse("1887-12-25").TryGetDiff(ExtendedDateRange.Parse("1968-03-25"), out var min, out var max);
+            //var minYears = min.TotalYears;
+            //var maxYears = max.TotalYears;
         }
     }
 }
