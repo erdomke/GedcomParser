@@ -34,6 +34,10 @@
         MarriageLicense,
         Marriage,
         MarriageSettlement,
-        Residence
+        Residence,
+
+        Arrival,
+        Departure,
+        Occupation,
     }
 }

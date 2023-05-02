@@ -2,12 +2,21 @@
 using SixLabors.Fonts;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 
 namespace GedcomParser
 {
   class Program
   {
     static void Main(string[] args)
+    {
+      var db = new Database();
+      new GrampsXmlLoader().Load(db, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.gramps"));
+      new YamlWriter().Write(db, @"C:\Users\erdomke\Downloads\Gramps_2022-12-28.yaml");
+      ;
+    }
+
+    static void RenderFamilyHtml(string[] args)
     {
       var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged");
       //var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.ged");

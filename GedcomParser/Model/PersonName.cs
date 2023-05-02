@@ -6,7 +6,7 @@
         public int _surnameLength;
 
         public string Name { get; }
-        public string Surname => _surnameStart >= 0 ? Name.Substring(_surnameStart, _surnameLength) : null;
+        public string Surname => _surnameStart >= 0 && _surnameLength > 0 ? Name.Substring(_surnameStart, _surnameLength) : null;
 
         public PersonName(string value)
         {

@@ -24,6 +24,13 @@ namespace GedcomParser
       End = end;
     }
 
+    public ExtendedDateRange(ExtendedDateTime start, ExtendedDateTime end, DateRangeType type)
+    {
+      Type = type;
+      Start = start;
+      End = end;
+    }
+
     public bool InRange(ExtendedDateRange range)
     {
       return (!Start.HasValue || range.Start >= Start)

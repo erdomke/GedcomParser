@@ -24,12 +24,12 @@ namespace GedcomParser.Model
 
         public IEnumerable<Individual> Individuals()
         {
-            return _nodes.Values.OfType<Individual>();
+            return _nodes.Values.OfType<Individual>().Distinct();
         }
 
         public IEnumerable<Family> Families()
         {
-            return _nodes.Values.OfType<Family>();
+            return _nodes.Values.OfType<Family>().Distinct();
         }
 
         public T GetValue<T>(string id) where T : IPrimaryObject

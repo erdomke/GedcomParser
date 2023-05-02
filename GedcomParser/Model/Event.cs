@@ -12,5 +12,6 @@ namespace GedcomParser.Model
     public Place Place { get; set; }
     public List<Citation> Citations { get; } = new List<Citation>();
     public string Context { get; set; }
+    public List<Note> Notes { get; } = new List<Note>();
   }
 }
