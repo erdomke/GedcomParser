@@ -12,7 +12,8 @@ namespace GedcomParser
     {
       var db = new Database();
       new GrampsXmlLoader().Load(db, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.gramps"));
-      new YamlWriter().Write(db, @"C:\Users\erdomke\Downloads\Gramps_2022-12-28.yaml");
+      db.MakeIdsHumanReadable();
+      new YamlWriter().Write(db, @"C:\Users\erdomke\source\GitHub\GedcomParser\Gramps_2022-12-28.yaml");
       ;
     }
 
@@ -50,9 +51,10 @@ namespace GedcomParser
           html.WriteEndElement();
 
           html.WriteStartElement("ul");
+          var familyMembers = family.Parents.Concat(family.Children).ToList();
           foreach (var familyEvent in family.Events.OrderBy(e => e.Date.Start))
           {
-            var individual = family.Parents.Concat(family.Children).FirstOrDefault(i => i.Id.Contains(familyEvent.Context));
+            var individual = db.WhereUsed(familyEvent).OfType<Individual>().Intersect(familyMembers).FirstOrDefault();
             if (individual == null)
               html.WriteElementString("li", $"{familyEvent.Date:s}, {familyEvent.Type}, {familyEvent.Place}");
             else

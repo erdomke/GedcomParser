@@ -7,17 +7,9 @@
         /// </summary>
         Other,
         /// <summary>
-        /// Also known as, alias, etc.
-        /// </summary>
-        Aka,
-        /// <summary>
         /// Name given at or near birth.
         /// </summary>
         Birth,
-        /// <summary>
-        /// Name assumed at the time of immigration.
-        /// </summary>
-        Immigrant,
         /// <summary>
         /// Maiden name, name before first marriage.
         /// </summary>
@@ -27,8 +19,16 @@
         /// </summary>
         Married,
         /// <summary>
+        /// Name assumed at the time of immigration.
+        /// </summary>
+        Immigrant,
+        /// <summary>
         /// Name used professionally (pen, screen, stage name).
         /// </summary>
         Professional,
+        /// <summary>
+        /// Also known as, alias, etc.
+        /// </summary>
+        Aka,
     }
 }

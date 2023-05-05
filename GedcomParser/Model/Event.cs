@@ -7,11 +7,13 @@ namespace GedcomParser.Model
   public class Event : IPrimaryObject
   {
     public Identifiers Id { get; } = new Identifiers();
+
     public EventType Type { get; set; }
+    public string TypeString { get; set; }
     public ExtendedDateRange Date { get; set; }
     public Place Place { get; set; }
+    public Organization Organization { get; set; }
     public List<Citation> Citations { get; } = new List<Citation>();
-    public string Context { get; set; }
     public List<Note> Notes { get; } = new List<Note>();
   }
 }

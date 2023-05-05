@@ -10,11 +10,7 @@ namespace GedcomParser.Model
 
         public PersonName Name { get; set; }
         public NameType Type { get; set; }
-        public string TypeString
-        {
-            get => _typeString ?? Type.ToString();
-            set => _typeString = value;
-        }
+        public string TypeString { get; set; }
         public string NamePrefix { get; set; }
         public string GivenName { get; set; }
         public string Nickname { get; set; }

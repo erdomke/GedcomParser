@@ -16,7 +16,7 @@ namespace GedcomParser
         {
           database.Add(new FamilyLink()
           {
-            Individual = individual.Id.First(),
+            Individual = individual.Id.Primary,
             Family = familyChild.Pointer,
             Type = Enum.Parse<FamilyLinkType>((string)familyChild.Child("PEDI") ?? "Birth", true)
           });
@@ -46,7 +46,7 @@ namespace GedcomParser
                         ?? (string)child.Child("RELA"))
             })))
         {
-          rel.Family = family.Id.First();
+          rel.Family = family.Id.Primary;
           database.Add(rel);
         }
       }
@@ -142,7 +142,6 @@ namespace GedcomParser
       result.Citations.AddRange(structure
           .Children("SOUR")
           .Select(Citation));
-      result.Context = context;
       return result;
     }
 
@@ -157,19 +156,22 @@ namespace GedcomParser
     {
       var result = new Citation
       {
-        SourceId = (string)structure,
-        Page = (string)structure.Child("PAGE"),
-        RecordId = (string)structure.Child("_APID")
+        Pages = (string)structure.Child("PAGE"),
+        RecordNumber = (string)structure.Child("_APID")
       };
+      result.Id.Add((string)structure);
       if (structure.Child("DATA")?.Child("DATE") != null
           && structure.Child("DATA").Child("DATE").TryGetDateRange(out var dateRange))
       {
-        result.Date = dateRange;
+        result.DatePublished = dateRange;
       }
-      if (int.TryParse((string)structure.Child("QUAY") ?? "2", out var confidence))
-        result.Confidence = (ConfidenceLevel)confidence;
-      result.Note = (string)structure.Child("NOTE")
-          ?? (string)structure.Child("DATA")?.Child("NOTE");
+      var note = (string)structure.Child("NOTE")
+        ?? (string)structure.Child("DATA")?.Child("NOTE");
+      if (!string.IsNullOrEmpty(note))
+        result.Notes.Add(new Note()
+        {
+          Text = note
+        });
       return result;
     }
 
@@ -180,7 +182,7 @@ namespace GedcomParser
         case "ADOP": eventType = EventType.Adoption; return true;
         case "BAPM": eventType = EventType.Baptism; return true;
         case "BARM": eventType = EventType.BarMitzvah; return true;
-        case "BASM": eventType = EventType.BasMitzvah; return true;
+        case "BASM": eventType = EventType.BatMitzvah; return true;
         case "BIRT": eventType = EventType.Birth; return true;
         case "BLES": eventType = EventType.Blessing; return true;
         case "BURI": eventType = EventType.Burial; return true;

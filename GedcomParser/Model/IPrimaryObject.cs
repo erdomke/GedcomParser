@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿using System.Collections.Generic;
 
 namespace GedcomParser.Model
 {
-    public interface IPrimaryObject
-    {
-        Identifiers Id { get; }
-    }
+  public interface IPrimaryObject : IIndexedObject
+  {
+    List<Citation> Citations { get; }
+    List<Note> Notes { get; }
+  }
 }

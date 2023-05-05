@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace GedcomParser.Model
 {
@@ -9,23 +10,42 @@ namespace GedcomParser.Model
   {
     private readonly HashSet<string> _ids = new HashSet<string>();
 
+    public string Primary { get; set; }
+
     private string DebuggerDisplay => string.Join(", ", _ids);
 
     public Identifiers() { }
 
     public Identifiers(string id)
     {
-      _ids.Add(id);
+      Add(id);
     }
 
     public void Add(string id)
     {
-      _ids.Add(id);
+      Add(id, string.IsNullOrEmpty(Primary));
+    }
+
+    public bool Add(string id, bool primary)
+    {
+      if (!string.IsNullOrEmpty(id))
+      {
+        var result = _ids.Add(id);
+        if (primary)
+          Primary = id;
+        return result;
+      }
+      else
+      {
+        return false;
+      }
     }
 
     public void AddRange(IEnumerable<string> identifiers)
     {
-      _ids.UnionWith(identifiers);
+      if (string.IsNullOrEmpty(Primary))
+        Primary = identifiers.FirstOrDefault();
+      _ids.UnionWith(identifiers.Where(i => !string.IsNullOrEmpty(i)));
     }
 
     public bool Contains(string identifier)
@@ -46,6 +66,11 @@ namespace GedcomParser.Model
     IEnumerator IEnumerable.GetEnumerator()
     {
       return GetEnumerator();
+    }
+
+    public override string ToString()
+    {
+      return Primary;
     }
   }
 }
