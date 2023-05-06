@@ -156,9 +156,9 @@ namespace GedcomParser
     {
       var result = new Citation
       {
-        Pages = (string)structure.Child("PAGE"),
         RecordNumber = (string)structure.Child("_APID")
       };
+      result.SetPages((string)structure.Child("PAGE"));
       result.Id.Add((string)structure);
       if (structure.Child("DATA")?.Child("DATE") != null
           && structure.Child("DATA").Child("DATE").TryGetDateRange(out var dateRange))

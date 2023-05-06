@@ -13,7 +13,11 @@ namespace GedcomParser.Model
     public ExtendedDateRange Date { get; set; }
     public Place Place { get; set; }
     public Organization Organization { get; set; }
+
+    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
     public List<Citation> Citations { get; } = new List<Citation>();
+    public List<Link> Links { get; } = new List<Link>();
+    public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
   }
 }

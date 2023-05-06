@@ -1,6 +1,6 @@
 ﻿using GedcomParser.Model;
 using System;
-using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Xml.Linq;
 
@@ -9,12 +9,6 @@ namespace GedcomParser
   internal class GrampsXmlLoader
   {
     private static XNamespace grampsNs = "http://gramps-project.org/xml/1.7.1/";
-
-    private Dictionary<string, Place> _places = new Dictionary<string, Place>();
-    private Dictionary<string, Citation> _citations = new Dictionary<string, Citation>();
-    private Dictionary<string, Organization> _repositories = new Dictionary<string, Organization>();
-    private Dictionary<string, Event> _events = new Dictionary<string, Event>();
-    private Dictionary<string, Note> _notes = new Dictionary<string, Note>();
 
     public void Load(Database database, XElement root)
     {
@@ -25,44 +19,55 @@ namespace GedcomParser
         {
           Text = (string)noteElement.Element(grampsNs + "text")
         };
-        note.Id.Add((string)noteElement.Attribute("id"));
-        note.Id.Add((string)noteElement.Attribute("handle"));
-        _notes[(string)noteElement.Attribute("handle")] = note;
+        AddCommonFields(noteElement, note, database);
+        database.Add(note);
       }
 
       foreach (var repositoryElement in root.Element(grampsNs + "repositories").Elements(grampsNs + "repository"))
-      {
-        var repository = CreateRepository(repositoryElement);
-        _repositories[(string)repositoryElement.Attribute("handle")] = repository;
-        database.Add(repository);
-      }
+        database.Add(CreateRepository(repositoryElement, database));
 
-      foreach (var citationElement in root.Element(grampsNs + "citations").Elements(grampsNs + "citation"))
+      foreach (var group in root.Element(grampsNs + "citations").Elements(grampsNs + "citation")
+        .Select(e => CreateCitation(e, root, database))
+        .GroupBy(c => c))
       {
-        var citation = CreateCitation(citationElement, root);
-        _citations[(string)citationElement.Attribute("handle")] = citation;
-        database.Add(citation);
+        var citation = group.First();
+        if (group.Any(c => c.Attributes.Count > 0))
+          ;
+        citation.Id.AddRange(group.Skip(1).SelectMany(c => c.Id));
+        if (citation.TryGetLink(out var link))
+          database.Add(link);
+        else
+          database.Add(citation);
+      }
+      
+      foreach (var objElement in root.Element(grampsNs + "objects").Elements(grampsNs + "object"))
+      {
+        var obj = new Media();
+        AddCommonFields(objElement, obj, database);
+        var file = objElement.Element(grampsNs + "file");
+        if (file != null)
+        {
+          obj.Src = (string)file.Attribute("src");
+          obj.MimeType = (string)file.Attribute("mime");
+          obj.Description = (string)file.Attribute("description");
+          if (obj.Description == Path.GetFileNameWithoutExtension(obj.Src))
+            obj.Description = null;
+        }
+        if (TryGetDate(objElement, out var date))
+          obj.Date = date;
+        database.Add(obj);
       }
 
       foreach (var placeElement in root.Element(grampsNs + "places").Elements(grampsNs + "placeobj"))
-      {
-        var place = CreatePlace(placeElement);
-        _places[(string)placeElement.Attribute("handle")] = place;
-        database.Add(place);
-      }
-
+        database.Add(CreatePlace(placeElement, database));
+      
       foreach (var eventElement in root.Element(grampsNs + "events").Elements(grampsNs + "event"))
-      {
-        var eventObj = CreateEvent(eventElement);
-        _events[(string)eventElement.Attribute("handle")] = eventObj;
-        database.Add(eventObj);
-      }
-
+        database.Add(CreateEvent(eventElement, database));
+      
       foreach (var individualElement in root.Element(grampsNs + "people").Elements(grampsNs + "person"))
       {
         var individual = new Individual();
-        individual.Id.Add((string)individualElement.Attribute("id"));
-        individual.Id.Add((string)individualElement.Attribute("handle"));
+        AddCommonFields(individualElement, individual, database);
         if ((string)individualElement.Attribute("gender") == "M")
           individual.Sex = Sex.Male;
         if ((string)individualElement.Attribute("gender") == "F")
@@ -106,26 +111,22 @@ namespace GedcomParser
         }
         foreach (var eventRef in individualElement.Elements(grampsNs + "eventref"))
         {
-          if (_events.TryGetValue((string)eventRef.Attribute("hlink"), out var eventObj))
+          if (database.TryGetValue((string)eventRef.Attribute("hlink"), out Event eventObj))
             individual.Events.Add(eventObj);
         }
-
-        AddCitationsNotes(individualElement, individual);
-
+        
         database.Add(individual);
       }
 
       foreach (var familyElement in root.Element(grampsNs + "families").Elements(grampsNs + "family"))
       {
         var family = new Family();
-        family.Id.Add((string)familyElement.Attribute("id"));
-        family.Id.Add((string)familyElement.Attribute("handle"));
+        AddCommonFields(familyElement, family, database);
         foreach (var eventRef in familyElement.Elements(grampsNs + "eventref"))
         {
-          if (_events.TryGetValue((string)eventRef.Attribute("hlink"), out var eventObj))
+          if (database.TryGetValue((string)eventRef.Attribute("hlink"), out Event eventObj))
             family.Events.Add(eventObj);
         }
-        AddCitationsNotes(familyElement, family);
         foreach (var famRel in familyElement.Elements(grampsNs + "father")
           .Concat(familyElement.Elements(grampsNs + "mother"))
           .Concat(familyElement.Elements(grampsNs + "childref")))
@@ -154,19 +155,10 @@ namespace GedcomParser
       }
     }
 
-    private Citation CreateCitation(XElement citationElement, XElement root)
+    private Citation CreateCitation(XElement citationElement, XElement root, Database db)
     {
       var result = new Citation();
-      result.Id.Add((string)citationElement.Attribute("id"));
-      result.Id.Add((string)citationElement.Attribute("handle"));
-      var page = (string)citationElement.Element(grampsNs + "page");
-      if (!string.IsNullOrEmpty(page))
-      {
-        if (Uri.TryCreate(page, UriKind.Absolute, out var uri))
-          result.Url = uri;
-        else
-          result.Pages = page;
-      }
+      AddCommonFields(citationElement, result, db);
       if (TryGetDate(citationElement, out var date))
         result.DatePublished = date;
 
@@ -187,32 +179,27 @@ namespace GedcomParser
       }
 
       var repoRef = (string)citationElement.Element(grampsNs + "reporef")?.Attribute("hlink");
-      if (repoRef != null && _repositories.TryGetValue(repoRef, out var repo))
+      if (repoRef != null && db.TryGetValue(repoRef, out Organization repo))
         result.Repository = repo;
 
-      foreach (var noteRef in citationElement.Elements(grampsNs + "noteref"))
-      {
-        if (_notes.TryGetValue((string)noteRef.Attribute("hlink"), out var note))
-          result.Notes.Add(note);
-      }
+      result.SetPages((string)citationElement.Element(grampsNs + "page"));
 
       return result;
     }
 
-    private Organization CreateRepository(XElement repositoryElement)
+    private Organization CreateRepository(XElement repositoryElement, Database db)
     {
       var result = new Organization();
-      result.Id.Add((string)repositoryElement.Attribute("id"));
+      AddCommonFields(repositoryElement, result, db);
       result.Name = (string)repositoryElement.Element(grampsNs + "rname");
       return result;
     }
 
-    private Event CreateEvent(XElement eventElement)
+    private Event CreateEvent(XElement eventElement, Database db)
     {
       var eventObj = new Event();
-      eventObj.Id.Add((string)eventElement.Attribute("id"));
-      eventObj.Id.Add((string)eventElement.Attribute("handle"));
-
+      AddCommonFields(eventElement, eventObj, db);
+      
       var eventTypeString = (string)eventElement.Element(grampsNs + "type") ?? "";
       if (Enum.TryParse(eventTypeString.Replace(" ", ""), out EventType eventType))
       {
@@ -243,17 +230,13 @@ namespace GedcomParser
         eventObj.Date = date;
 
       var placeHandle = (string)eventElement.Element(grampsNs + "place")?.Attribute("hlink");
-      if (!string.IsNullOrEmpty(placeHandle) && _places.TryGetValue(placeHandle, out var place))
+      if (!string.IsNullOrEmpty(placeHandle) && db.TryGetValue(placeHandle, out Place place))
         eventObj.Place = place;
 
       eventObj.Notes.AddRange(eventElement.Elements(grampsNs + "description").Select(e => new Note()
       {
         Text = (string)e
       }));
-
-      // Description
-
-      AddCitationsNotes(eventElement, eventObj);
 
       return eventObj;
     }
@@ -303,29 +286,73 @@ namespace GedcomParser
       }
     }
 
-    private Place CreatePlace(XElement placeInfo)
+    private Place CreatePlace(XElement placeInfo, Database db)
     {
       var place = new Place();
-      place.Id.Add((string)placeInfo.Attribute("id"));
-      place.Id.Add((string)placeInfo.Attribute("handle"));
+      AddCommonFields(placeInfo, place, db);
       place.Names.AddRange(placeInfo.Elements(grampsNs + "pname").Select(e => (string)e.Attribute("value")));
       place.Latitude = (double?)placeInfo.Element(grampsNs + "coord")?.Attribute("lat");
       place.Longitude = (double?)placeInfo.Element(grampsNs + "coord")?.Attribute("long");
-      AddCitationsNotes(placeInfo, place);
       return place;
     }
 
-    private void AddCitationsNotes(XElement element, IPrimaryObject primaryObject)
+    private void AddCommonFields(XElement element, object primaryObject, Database db)
     {
-      foreach (var citeRef in element.Elements(grampsNs + "citationref"))
+      if (primaryObject is IHasAttributes attributes)
       {
-        if (_citations.TryGetValue((string)citeRef.Attribute("hlink"), out var citation))
-          primaryObject.Citations.Add(citation);
+        foreach (var attr in element.Elements(grampsNs + "attribute"))
+        {
+          attributes.Attributes[(string)attr.Attribute("type")] = (string)attr.Attribute("value");
+        }
       }
-      foreach (var noteRef in element.Elements(grampsNs + "noteref"))
+
+      if (primaryObject is IHasCitations citations)
       {
-        if (_notes.TryGetValue((string)noteRef.Attribute("hlink"), out var note))
-          primaryObject.Notes.Add(note);
+        foreach (var citeRef in element.Elements(grampsNs + "citationref"))
+        {
+          if (db.TryGetValue((string)citeRef.Attribute("hlink"), out Citation citation))
+            citations.Citations.Add(citation);
+        }
+      }
+      
+      if (primaryObject is IHasId ids)
+      {
+        ids.Id.Add((string)element.Attribute("id"));
+        ids.Id.Add((string)element.Attribute("handle"));
+      }
+
+      if (primaryObject is IHasLinks hasLinks)
+      {
+        foreach (var citeRef in element.Elements(grampsNs + "citationref"))
+        {
+          if (db.TryGetValue((string)citeRef.Attribute("hlink"), out Link link))
+            hasLinks.Links.Add(link);
+        }
+      }
+
+      if (primaryObject is IHasMedia mediaContainer)
+      {
+        foreach (var objRef in element.Elements(grampsNs + "objref"))
+        {
+          if (db.TryGetValue((string)objRef.Attribute("hlink"), out Media media))
+          {
+            mediaContainer.Media.Add(media);
+            foreach (var citeRef in objRef.Elements(grampsNs + "citationref"))
+            {
+              if (db.TryGetValue((string)citeRef.Attribute("hlink"), out Citation citation))
+                media.Citations.Add(citation);
+            }
+          }
+        }
+      }
+
+      if (primaryObject is IHasNotes notes)
+      {
+        foreach (var noteRef in element.Elements(grampsNs + "noteref"))
+        {
+          if (db.TryGetValue((string)noteRef.Attribute("hlink"), out Note note))
+            notes.Notes.Add(note);
+        }
       }
     }
   }

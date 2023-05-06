@@ -1,10 +1,9 @@
-﻿using System.Collections.Generic;
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace GedcomParser.Model
 {
   [DebuggerDisplay("{Text}")]
-  public class Note : IIndexedObject
+  public class Note : IHasId
   {
     public Identifiers Id { get; } = new Identifiers();
 

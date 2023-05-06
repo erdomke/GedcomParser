@@ -15,7 +15,10 @@ namespace GedcomParser.Model
     public string StreetAddress { get; set; }
     public string PostalCode { get; set; }
 
+    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
     public List<Citation> Citations { get; } = new List<Citation>();
+    public List<Link> Links { get; } = new List<Link>();
+    public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
 
     public override string ToString()

@@ -1,7 +1,6 @@
 ﻿using GedcomParser.Model;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using YamlDotNet.RepresentationModel;
@@ -10,8 +9,6 @@ namespace GedcomParser
 {
   public class YamlWriter
   {
-    private HashSet<Place> _globalPlaces = new HashSet<Place>();
-
     public void Write(Database db, string path)
     {
       using (var writer = new StreamWriter(path))
@@ -20,23 +17,18 @@ namespace GedcomParser
 
     public YamlDocument Write(Database db)
     {
-      _globalPlaces.UnionWith(db.Places().Where(p => p.Id.Any() && db.WhereUsed(p).Skip(1).Any()));
-      var people = BuildListingById(db.Individuals(), Visit, "people");
-      var places = BuildListingById(_globalPlaces, Visit, "places");
-      var citations = BuildListingById(db.Citations(), Visit, "citations");
-      var families = BuildListingById(db.Families(), f => Visit(f, db), "families");
-
       var root = new YamlMappingNode()
       {
-        { "people", people },
-        { "families", families },
-        { "places", places },
-        { "citations", citations }
+        { "people", BuildListingById(db.Individuals(), Visit, "people") },
+        { "families", BuildListingById(db.Families(), f => Visit(f, db), "families") },
+        { "organizations", BuildListingById(db.Organizations(), Visit, "organizations") },
+        { "places", BuildListingById(db.Places(), Visit, "places") },
+        { "citations", BuildListingById(db.Citations(), Visit, "citations") }
       };
       return new YamlDocument(root);
     }
 
-    private YamlMappingNode BuildListingById<T>(IEnumerable<T> objects, Func<T, YamlMappingNode> visit, string rootName) where T : IIndexedObject
+    private YamlMappingNode BuildListingById<T>(IEnumerable<T> objects, Func<T, YamlMappingNode> visit, string rootName) where T : IHasId
     {
       var result = new YamlMappingNode();
       foreach (var obj in objects.OrderBy(o => o.Id.Primary, StringComparer.OrdinalIgnoreCase))
@@ -58,7 +50,7 @@ namespace GedcomParser
       if (individual.Events.Count > 0)
         node.Add("events", new YamlSequenceNode(individual.Events.Select(Visit)));
 
-      AddCitationsNotes(node, individual);
+      AddCommonProperties(node, individual);
 
       return node;
     }
@@ -90,7 +82,7 @@ namespace GedcomParser
         node.Add("children", children);
       if (family.Events.Count > 0)
         node.Add("events", new YamlSequenceNode(family.Events.Select(Visit)));
-      AddCitationsNotes(node, family);
+      AddCommonProperties(node, family);
       return node;
     }
 
@@ -107,16 +99,29 @@ namespace GedcomParser
         node.Add("publication_title", citation.PublicationTitle);
       if (!string.IsNullOrEmpty(citation.Pages))
         node.Add("pages", citation.Pages);
+      if (citation.Publisher != null)
+      {
+        node.Add("publisher", new YamlMappingNode()
+        {
+          { "$ref", "#/organizations/" + citation.Publisher.Id.Primary }
+        });
+      }
+      if (citation.Repository != null)
+      {
+        node.Add("repository", new YamlMappingNode()
+        {
+          { "$ref", "#/organizations/" + citation.Repository.Id.Primary }
+        });
+      }
       if (citation.DateAccessed.HasValue)
         node.Add("date_accessed", citation.DateAccessed.ToString("s"));
       if (!string.IsNullOrEmpty(citation.RecordNumber))
         node.Add("record_number", citation.RecordNumber);
       if (!string.IsNullOrEmpty(citation.Doi))
         node.Add("doi", citation.Doi);
-
-      // TODO: Publisher
-      // TODO: Repository
-
+      if (citation.Url != null)
+        node.Add("url", citation.Url.ToString());
+      AddCommonProperties(node, citation);
       return node;
     }
 
@@ -174,7 +179,7 @@ namespace GedcomParser
       if (eventObj.Type == EventType.Generic)
       {
         if (!string.IsNullOrEmpty(eventObj.TypeString))
-          node.Add("custom_type", eventObj.TypeString);
+          node.Add("_type", eventObj.TypeString);
       }
       else
       {
@@ -186,19 +191,38 @@ namespace GedcomParser
 
       if (eventObj.Place != null)
       {
-        if (_globalPlaces.Contains(eventObj.Place))
-          node.Add("place", new YamlMappingNode()
-          {
-            { "$ref", "#/places/" + eventObj.Place.Id.Primary }
-          });
-        else
-          node.Add("place", Visit(eventObj.Place));
+        var place = new YamlMappingNode()
+        {
+          Style = YamlDotNet.Core.Events.MappingStyle.Flow
+        };
+        place.Add("$ref", "#/places/" + eventObj.Place.Id.Primary);
+        node.Add("place", place);
       }
 
-      // Organization
+      if (eventObj.Organization != null)
+      {
+        node.Add("organization", new YamlMappingNode()
+        {
+          { "$ref", "#/organizations/" + eventObj.Organization.Id.Primary }
+        });
+      }
 
-      AddCitationsNotes(node, eventObj);
+      AddCommonProperties(node, eventObj);
       
+      return node;
+    }
+
+    private YamlMappingNode Visit(Organization organization)
+    {
+      var node = new YamlMappingNode();
+      if (!string.IsNullOrEmpty(organization.Name))
+        node.Add("name", organization.Name);
+      if (organization.Place != null)
+        node.Add("place", new YamlMappingNode()
+        {
+          { "$ref", "#/places/" + organization.Place.Id.Primary }
+        });
+      AddCommonProperties(node, organization);
       return node;
     }
 
@@ -223,45 +247,97 @@ namespace GedcomParser
       if (place.Longitude.HasValue)
         node.Add("longitude", place.Longitude.Value.ToString());
 
-      AddCitationsNotes(node, place);
-        /*node.Add("$ids", new YamlSequenceNode(place.Id.Select(i => new YamlScalarNode(i)))
-        {
-          Style = SequenceStyle.Flow
-        });*/
+      AddCommonProperties(node, place);
       return node;
     }
 
-    private void AddCitationsNotes(YamlMappingNode mappingNode, IPrimaryObject primaryObject)
+    private void AddCommonProperties(YamlMappingNode mappingNode, object primaryObject)
     {
-      var notes = new YamlSequenceNode();
-      foreach (var note in primaryObject.Notes)
+      if (primaryObject is IHasAttributes hasAttributes)
       {
-        if (!string.IsNullOrEmpty(note.MimeType))
+        foreach (var attr in hasAttributes.Attributes)
         {
-          notes.Add(new YamlMappingNode()
+          mappingNode.Add("_" + attr.Key, attr.Value); 
+        }
+      }
+
+      if (primaryObject is IHasNotes hasNotes)
+      {
+        var notes = new YamlSequenceNode();
+        foreach (var note in hasNotes.Notes)
+        {
+          if (!string.IsNullOrEmpty(note.MimeType))
           {
-            { "text", note.Text },
-            { "mimetype", note.MimeType }
+            notes.Add(new YamlMappingNode()
+            {
+              { "text", note.Text },
+              { "mimetype", note.MimeType }
+            });
+          }
+          else
+          {
+            notes.Add(note.Text);
+          }
+        }
+        if (notes.Any())
+          mappingNode.Add("notes", notes);
+      }
+
+      if (primaryObject is IHasMedia hasMedia)
+      {
+        var mediaRefs = new YamlSequenceNode();
+        foreach (var media in hasMedia.Media)
+        {
+          var mediaNode = new YamlMappingNode();
+          if (!string.IsNullOrEmpty(media.Src))
+            mediaNode.Add("src", media.Src);
+          if (!string.IsNullOrEmpty(media.Description))
+            mediaNode.Add("description", media.Description);
+          if (!string.IsNullOrEmpty(media.MimeType))
+            mediaNode.Add("mimetype", media.MimeType);
+          if (media.Date.HasValue)
+            mediaNode.Add("date", media.Date.ToString("s"));
+          AddCommonProperties(mediaNode, media);
+        }
+        if (mediaRefs.Any())
+          mappingNode.Add("media", mediaRefs);
+      }
+
+      if (primaryObject is IHasLinks hasLinks)
+      {
+        var links = new YamlSequenceNode();
+        foreach (var link in hasLinks.Links)
+        {
+          if (!string.IsNullOrEmpty(link.Description))
+          {
+            links.Add(new YamlMappingNode()
+            {
+              { "url", link.Url.ToString() },
+              { "description", link.Description }
+            });
+          }
+          else
+          {
+            links.Add(link.Url.ToString());
+          }
+        }
+        if (links.Any())
+          mappingNode.Add("links", links);
+      }
+
+      if (primaryObject is IHasCitations hasCitations)
+      {
+        var citations = new YamlSequenceNode();
+        foreach (var citation in hasCitations.Citations)
+        {
+          citations.Add(new YamlMappingNode()
+          {
+            { "$ref", "#/citations/" + citation.Id.Primary }
           });
         }
-        else
-        {
-          notes.Add(note.Text);
-        }
+        if (citations.Any())
+          mappingNode.Add("citations", citations);
       }
-      if (notes.Any())
-        mappingNode.Add("notes", notes);
-
-      var citations = new YamlSequenceNode();
-      foreach (var citation in primaryObject.Citations)
-      {
-        citations.Add(new YamlMappingNode()
-        {
-          { "$ref", "#/citations/" + citation.Id.Primary }
-        });
-      }
-      if (citations.Any())
-        mappingNode.Add("citations", citations);
     }
   }
 }

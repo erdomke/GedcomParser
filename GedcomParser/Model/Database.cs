@@ -3,17 +3,18 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace GedcomParser.Model
 {
   public class Database
   {
-    private Dictionary<string, IIndexedObject> _nodes = new Dictionary<string, IIndexedObject>();
+    private Dictionary<string, IHasId> _nodes = new Dictionary<string, IHasId>();
     private Lookup<string, FamilyLink> _relationships = new Lookup<string, FamilyLink>();
-    private Lookup<IIndexedObject, IIndexedObject> _whereUsed = new Lookup<IIndexedObject, IIndexedObject>();
+    private Lookup<IHasId, IHasId> _whereUsed = new Lookup<IHasId, IHasId>();
 
 
-    public void Add(IIndexedObject primaryObject)
+    public void Add(IHasId primaryObject)
     {
       foreach (var id in primaryObject.Id)
         _nodes.Add(id, primaryObject);
@@ -41,8 +42,13 @@ namespace GedcomParser.Model
       UpdateIndices(Places(), p =>
       {
         var builder = new StringBuilder();
-        foreach (var part in p.Names.First().Split(',').Take(2))
-          AddFirstLetters(part, 10, builder);
+        foreach (var part in p.Names.First().Split(','))
+        {
+          var length = Math.Min(15, 30 - builder.Length);
+          if (length <= 0)
+            break;
+          AddFirstLetters(part, length, builder);
+        }
         return builder.ToString();
       });
 
@@ -61,9 +67,27 @@ namespace GedcomParser.Model
           builder.Append(start.Value.ToString("yyyy"));
         return builder.ToString();
       });
+
+      UpdateIndices(Citations(), c =>
+      {
+        var builder = new StringBuilder();
+        if (c.DatePublished.TryGetRange(out var start, out var _) && start.HasValue)
+        {
+          builder.Append(start.Value.ToString("yyyy"));
+        }
+        else
+        {
+          var match = Regex.Match(c.Title + c.Pages, @"\b[1-2]\d{3}\b");
+          if (match.Success)
+            builder.Append(match.Value);
+        }
+        AddFirstLetters(c.Author, 10, builder);
+        AddFirstLetters(c.Title ?? c.Pages, 10, builder);
+        return builder.ToString();
+      });
     }
 
-    private void UpdateIndices<T>(IEnumerable<T> objects, Func<T, string> keyGetter) where T : IIndexedObject
+    private void UpdateIndices<T>(IEnumerable<T> objects, Func<T, string> keyGetter) where T : IHasId
     {
       foreach (var group in objects.GroupBy(keyGetter, StringComparer.OrdinalIgnoreCase))
       {
@@ -95,7 +119,7 @@ namespace GedcomParser.Model
       }
     }
 
-    public IEnumerable<IIndexedObject> WhereUsed(IIndexedObject primaryObject)
+    public IEnumerable<IHasId> WhereUsed(IHasId primaryObject)
     {
       if (_whereUsed.Count < 1)
       {
@@ -154,19 +178,24 @@ namespace GedcomParser.Model
       return _nodes.Values.OfType<Family>().Distinct();
     }
 
+    public IEnumerable<Organization> Organizations()
+    {
+      return _nodes.Values.OfType<Organization>().Distinct();
+    }
+
     public IEnumerable<Place> Places()
     {
       return _nodes.Values.OfType<Place>().Distinct();
     }
 
-    public T GetValue<T>(string id) where T : IIndexedObject
+    public T GetValue<T>(string id) where T : IHasId
     {
       if (!TryGetValue(id, out T result))
         throw new InvalidOperationException($"Cannot find {typeof(T).Name} with id {id}");
       return result;
     }
 
-    public bool TryGetValue<T>(string id, out T primary) where T : IIndexedObject
+    public bool TryGetValue<T>(string id, out T primary) where T : IHasId
     {
       if (_nodes.TryGetValue(id, out var primaryObject)
           && primaryObject is T typed)
@@ -181,7 +210,7 @@ namespace GedcomParser.Model
       }
     }
 
-    public IEnumerable<FamilyLink> FamilyLinks(IIndexedObject primary, FamilyLinkType type)
+    public IEnumerable<FamilyLink> FamilyLinks(IHasId primary, FamilyLinkType type)
     {
       return primary.Id.SelectMany(i => FamilyLinks(i, type));
     }

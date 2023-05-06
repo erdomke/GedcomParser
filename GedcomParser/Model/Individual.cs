@@ -17,11 +17,11 @@ namespace GedcomParser.Model
     public ExtendedDateRange DeathDate => Events.FirstOrDefault(e => e.Type == EventType.Death)?.Date ?? default;
     public List<IndividualName> Names { get; } = new List<IndividualName>();
     public List<Event> Events { get; } = new List<Event>();
-    public string Phone { get; set; }
-    public string Email { get; set; }
-    public string Url { get; set; }
-
+    
+    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
     public List<Citation> Citations { get; } = new List<Citation>();
+    public List<Link> Links { get; } = new List<Link>();
+    public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
   }
 }
