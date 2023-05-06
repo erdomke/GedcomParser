@@ -1,7 +1,9 @@
 ﻿using GedcomParser.Model;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.WebSockets;
 using System.Xml.Linq;
 
 namespace GedcomParser
@@ -10,8 +12,40 @@ namespace GedcomParser
   {
     private static XNamespace grampsNs = "http://gramps-project.org/xml/1.7.1/";
 
+    private void BuildSchema(XElement element, string path, HashSet<string> paths)
+    {
+      var name = element.Name.LocalName;
+      var attrNames = string.Join(",", element.Attributes().Select(a => "@" + a.Name));
+      if (!string.IsNullOrEmpty(attrNames))
+        name += "[" + attrNames + "]";
+      if (element.HasElements)
+      {
+        foreach (var child in element.Elements())
+        {
+          BuildSchema(child, path + "/" + name, paths);
+        }
+      }
+      else
+      {
+        paths.Add(path + "/" + name);
+      }
+    }
+
+    private Dictionary<string, int> _addressPartsOrder = new Dictionary<string, int>()
+    {
+      { "street", 0 },
+      { "city", 1 },
+      { "locality", 2 },
+      { "state", 3 },
+      { "country", 4 },
+    };
+
     public void Load(Database database, XElement root)
     {
+      //var paths = new HashSet<string>();
+      //BuildSchema(root, "", paths);
+      //File.WriteAllLines(@"C:\Users\erdomke\source\GitHub\GedcomParser\citations.txt", paths.OrderBy(p => p));
+
       foreach (var noteElement in root.Element(grampsNs + "notes").Elements(grampsNs + "note")
         .Where(e => (string)e.Attribute("type") != "GEDCOM import"))
       {
@@ -109,12 +143,44 @@ namespace GedcomParser
           }.Where(n => !string.IsNullOrEmpty(n))));
           individual.Names.Add(iName);
         }
+
+        var events = new List<Event>();
         foreach (var eventRef in individualElement.Elements(grampsNs + "eventref"))
         {
           if (database.TryGetValue((string)eventRef.Attribute("hlink"), out Event eventObj))
-            individual.Events.Add(eventObj);
+            events.Add(eventObj);
         }
-        
+
+        foreach (var addressRef in individualElement.Elements(grampsNs + "address"))
+        {
+          var eventObj = new Event
+          {
+            Type = EventType.Residence,
+            Place = new Place()
+          };
+          AddCommonFields(addressRef, eventObj, database);
+          eventObj.Place.Names.Add(string.Join(", ", addressRef.Elements()
+            .Where(e => _addressPartsOrder.ContainsKey(e.Name.LocalName))
+            .OrderBy(e => _addressPartsOrder[e.Name.LocalName])
+            .Select(e => (string)e)));
+          if (TryGetDate(addressRef, out var date))
+            eventObj.Date = date;
+          events.Add(eventObj);
+        }
+
+        individual.Events.AddRange(events
+          .OrderBy(e =>
+          {
+            if (e.Type == EventType.Birth)
+              return 0;
+            if (e.Type == EventType.Death)
+              return 10;
+            if (e.Type == EventType.Burial)
+              return 11;
+            return 5;
+          })
+          .ThenBy(e => e.Date.ToString("s")));
+
         database.Add(individual);
       }
 
@@ -122,6 +188,8 @@ namespace GedcomParser
       {
         var family = new Family();
         AddCommonFields(familyElement, family, database);
+        if (Enum.TryParse(((string)familyElement.Element(grampsNs + "rel")?.Attribute("type") ?? "Unknown").Replace(" ", ""), true, out FamilyType familyType))
+          family.Type = familyType;
         foreach (var eventRef in familyElement.Elements(grampsNs + "eventref"))
         {
           if (database.TryGetValue((string)eventRef.Attribute("hlink"), out Event eventObj))
@@ -178,11 +246,29 @@ namespace GedcomParser
           };
       }
 
+      if ((string)citationElement.Element(grampsNs + "srcattribute")?.Attribute("type") == "Url"
+        && Uri.TryCreate((string)citationElement.Element(grampsNs + "srcattribute").Attribute("value"), UriKind.Absolute, out var uri)
+        && uri.Scheme.StartsWith("http"))
+      {
+        result.Url = uri;
+      }
+
       var repoRef = (string)citationElement.Element(grampsNs + "reporef")?.Attribute("hlink");
       if (repoRef != null && db.TryGetValue(repoRef, out Organization repo))
         result.Repository = repo;
 
       result.SetPages((string)citationElement.Element(grampsNs + "page"));
+
+      var urlNote = result.Notes
+        .Select(n => new { Note = n, Url = Uri.TryCreate(n.Text, UriKind.Absolute, out var uri) ? uri : null })
+        .FirstOrDefault(n => n.Url?.Scheme.StartsWith("http") == true);
+      if (urlNote != null
+        && (result.Url == null
+          || result.Url == urlNote.Url))
+      {
+        result.Url = urlNote.Url;
+        result.Notes.Remove(urlNote.Note);
+      }
 
       return result;
     }
@@ -252,7 +338,14 @@ namespace GedcomParser
         else if (dateType == "after")
           dateRange = new ExtendedDateRange(ExtendedDateTime.Parse(dateVal), default);
         else
-          dateRange = new ExtendedDateRange(ExtendedDateTime.Parse(dateVal));
+        {
+          if ((string)element.Element(grampsNs + "dateval")?.Attribute("quality") == "estimated")
+            dateRange = new ExtendedDateRange(ExtendedDateTime.Parse(dateVal).WithCertainty(DateCertainty.Estimated));
+          else if (dateType == "about")
+            dateRange = new ExtendedDateRange(ExtendedDateTime.Parse(dateVal).WithCertainty(DateCertainty.About));
+          else
+            dateRange = new ExtendedDateRange(ExtendedDateTime.Parse(dateVal));
+        }
         return true;
       }
       else if (element.Element(grampsNs + "daterange") != null)
@@ -291,6 +384,7 @@ namespace GedcomParser
       var place = new Place();
       AddCommonFields(placeInfo, place, db);
       place.Names.AddRange(placeInfo.Elements(grampsNs + "pname").Select(e => (string)e.Attribute("value")));
+      place.Names.AddRange(placeInfo.Elements(grampsNs + "ptitle").Select(e => (string)e));
       place.Latitude = (double?)placeInfo.Element(grampsNs + "coord")?.Attribute("lat");
       place.Longitude = (double?)placeInfo.Element(grampsNs + "coord")?.Attribute("long");
       return place;
@@ -302,7 +396,9 @@ namespace GedcomParser
       {
         foreach (var attr in element.Elements(grampsNs + "attribute"))
         {
-          attributes.Attributes[(string)attr.Attribute("type")] = (string)attr.Attribute("value");
+          var type = (string)attr.Attribute("type");
+          if (type != "Merged Gramps ID")
+            attributes.Attributes[type] = (string)attr.Attribute("value");
         }
       }
 

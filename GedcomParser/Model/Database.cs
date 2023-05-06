@@ -77,12 +77,34 @@ namespace GedcomParser.Model
         }
         else
         {
-          var match = Regex.Match(c.Title + c.Pages, @"\b[1-2]\d{3}\b");
+          var match = Regex.Match(c.Title + c.Pages, @"\b[1-2]\d{3}s?\b");
           if (match.Success)
-            builder.Append(match.Value);
+            builder.Append(match.Value.TrimEnd('s'));
         }
-        AddFirstLetters(c.Author, 10, builder);
-        AddFirstLetters(c.Title ?? c.Pages, 10, builder);
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(c.Author))
+          parts.Add(c.Author);
+        if (c.Url != null)
+        {
+          var idx = c.Url.PathAndQuery.LastIndexOfAny(new[] { '?', '/' });
+          if (idx > 0 && c.Url.PathAndQuery[idx] == '?')
+            idx = c.Url.PathAndQuery.IndexOf('=', idx);
+          if (idx > 0)
+            parts.Add(c.Url.PathAndQuery.Substring(idx + 1));
+        }
+        if (!string.IsNullOrEmpty(c.Title))
+          parts.Add(c.Title);
+        if (!string.IsNullOrEmpty(c.Pages))
+          parts.Add(c.Pages);
+
+        foreach (var part in parts)
+        {
+          var remaining = Math.Min(10, 30 - builder.Length);
+          if (remaining <= 0)
+            break;
+          AddFirstLetters(part, 10, builder);
+        }
+
         return builder.ToString();
       });
     }

@@ -38,6 +38,15 @@ namespace GedcomParser
       private set => _data = (_data & ~0b11UL) | ((ulong)value & 0b11UL);
     }
 
+    public ExtendedDateTime WithCertainty(DateCertainty certainty)
+    {
+      return new ExtendedDateTime()
+      {
+        _data = _data,
+        Certainty = certainty
+      };
+    }
+
     /// <summary>
     /// The calendar to which the date belongs.
     /// </summary>

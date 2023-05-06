@@ -6,6 +6,7 @@ namespace GedcomParser.Model
   {
     public Identifiers Id { get; } = new Identifiers();
     public List<Event> Events { get; } = new List<Event>();
+    public FamilyType Type { get; set; }
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
     public List<Citation> Citations { get; } = new List<Citation>();

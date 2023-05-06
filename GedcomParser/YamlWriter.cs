@@ -69,6 +69,10 @@ namespace GedcomParser
       }
       if (parents.Any())
         node.Add("parents", parents);
+
+      if (family.Type != FamilyType.Unknown)
+        node.Add("type", family.Type.ToString());
+
       var children = new YamlSequenceNode();
       foreach (var link in db.FamilyLinks(family, FamilyLinkType.Child))
       {
