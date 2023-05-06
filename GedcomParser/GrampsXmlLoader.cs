@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Net.WebSockets;
 using System.Xml.Linq;
 
 namespace GedcomParser
@@ -42,10 +41,6 @@ namespace GedcomParser
 
     public void Load(Database database, XElement root)
     {
-      //var paths = new HashSet<string>();
-      //BuildSchema(root, "", paths);
-      //File.WriteAllLines(@"C:\Users\erdomke\source\GitHub\GedcomParser\citations.txt", paths.OrderBy(p => p));
-
       foreach (var noteElement in root.Element(grampsNs + "notes").Elements(grampsNs + "note")
         .Where(e => (string)e.Attribute("type") != "GEDCOM import"))
       {
@@ -65,8 +60,6 @@ namespace GedcomParser
         .GroupBy(c => c))
       {
         var citation = group.First();
-        if (group.Any(c => c.Attributes.Count > 0))
-          ;
         citation.Id.AddRange(group.Skip(1).SelectMany(c => c.Id));
         if (citation.TryGetLink(out var link))
           database.Add(link);
@@ -109,6 +102,7 @@ namespace GedcomParser
         foreach (var name in individualElement.Elements(grampsNs + "name"))
         {
           var iName = new IndividualName();
+          AddCommonFields(name, iName, database);
           switch (((string)name.Attribute("type")).ToUpperInvariant())
           {
             case "ALSO KNOWN AS":
@@ -159,10 +153,12 @@ namespace GedcomParser
             Place = new Place()
           };
           AddCommonFields(addressRef, eventObj, database);
+          eventObj.Place.Id.Add(Guid.NewGuid().ToString("N"));
           eventObj.Place.Names.Add(string.Join(", ", addressRef.Elements()
             .Where(e => _addressPartsOrder.ContainsKey(e.Name.LocalName))
             .OrderBy(e => _addressPartsOrder[e.Name.LocalName])
             .Select(e => (string)e)));
+          database.Add(eventObj.Place);
           if (TryGetDate(addressRef, out var date))
             eventObj.Date = date;
           events.Add(eventObj);
@@ -175,7 +171,8 @@ namespace GedcomParser
               return 0;
             if (e.Type == EventType.Death)
               return 10;
-            if (e.Type == EventType.Burial)
+            if (e.Type == EventType.Burial
+              || e.Type == EventType.Probate)
               return 11;
             return 5;
           })

@@ -1,15 +1,11 @@
 ﻿using GedcomParser;
-using GedcomParser.Model;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 
 namespace GedcomTests
 {
-    [TestClass]
+  [TestClass]
     public class FileTests
     {
         public TestContext TestContext { get; set; }
@@ -19,7 +15,6 @@ namespace GedcomTests
         {
             var dirParts = TestContext.TestDeploymentDir.Replace('\\', '/').Split('/');
             var baseDir = string.Join("/", dirParts, 0, Array.IndexOf(dirParts, "bin"));
-            //var filePath = @"C:\Users\erdomke\Downloads\D Family Tree(3).ged";
             var filePath = Path.Combine(baseDir, "Files", "TGC551.ged");
             var structure = GStructure.Load(filePath);
 

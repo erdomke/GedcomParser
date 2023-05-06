@@ -1,16 +1,36 @@
 ﻿using GedcomParser.Model;
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Xml.Linq;
 
 namespace GedcomParser
 {
   public class GedcomLoader
   {
+    private void GetPaths(GStructure structure, string path, HashSet<string> paths)
+    {
+      if (structure.Children().Any())
+      {
+        foreach (var child in structure.Children())
+        {
+          GetPaths(child, path + "/" + structure.Tag, paths);
+        }
+      }
+      else
+      {
+        paths.Add(path + "/" + structure.Tag);
+      }
+    }
+
     public void Load(Database database, GStructure structure)
     {
+      foreach (var child in structure.Children("OBJE"))
+        database.Add(Media(child, database));
+      
       foreach (var child in structure.Children("INDI"))
       {
-        var individual = Individual(child);
+        var individual = Individual(child, database);
         database.Add(individual);
         foreach (var familyChild in child.Children("FAMC"))
         {
@@ -22,9 +42,10 @@ namespace GedcomParser
           });
         }
       }
+
       foreach (var child in structure.Children("FAM"))
       {
-        var family = Family(child);
+        var family = Family(child, database);
         database.Add(family);
 
         foreach (var rel in child.Children("HUSB")
@@ -52,7 +73,7 @@ namespace GedcomParser
       }
     }
 
-    public Individual Individual(GStructure structure)
+    public Individual Individual(GStructure structure, Database db)
     {
       var result = new Individual();
       result.Id.Add(structure.Id);
@@ -70,16 +91,16 @@ namespace GedcomParser
       }
       result.Names.AddRange(structure
           .Children("NAME")
-          .Select(IndividualName));
+          .Select(s => IndividualName(s, db)));
       result.Events.AddRange(structure
           .Children()
           .Where(c => TryGetEventType(c.Tag, out var _))
-          .Select(e => Event(e, structure.Id)));
-
+          .Select(e => Event(e, db)));
+      AddCommonFields(structure, result, db);
       return result;
     }
 
-    public IndividualName IndividualName(GStructure structure)
+    public IndividualName IndividualName(GStructure structure, Database db)
     {
       var result = new IndividualName
       {
@@ -108,27 +129,31 @@ namespace GedcomParser
       result.NameSuffix = (string)structure.Child("NSFX");
       foreach (var tran in structure.Children("TRAN"))
       {
-        result.Translations.Add((string)tran.Child("LANG"), IndividualName(tran));
+        result.Translations.Add((string)tran.Child("LANG"), IndividualName(tran, db));
       }
+      AddCommonFields(structure, result, db);
       return result;
     }
 
-    public Family Family(GStructure structure)
+    public Family Family(GStructure structure, Database db)
     {
       var result = new Family();
       result.Id.Add(structure.Id);
       result.Events.AddRange(structure
           .Children()
           .Where(c => TryGetEventType(c.Tag, out var _))
-          .Select(e => Event(e, structure.Id)));
+          .Select(e => Event(e, db)));
+      AddCommonFields(structure, result, db);
       return result;
     }
 
 
-    public Event Event(GStructure structure, string context)
+    public Event Event(GStructure structure, Database db)
     {
       var result = new Event();
-      if (TryGetEventType(structure.Tag, out var type))
+      if (structure.Tag == "EVEN")
+        result.TypeString = (string)structure.Child("TYPE");
+      else if (TryGetEventType(structure.Tag, out var type))
         result.Type = type;
       else
         throw new ArgumentException($"Structure {structure.Tag} does not represent a valid event.");
@@ -138,28 +163,30 @@ namespace GedcomParser
       else
         result.Date = default;
       if (structure.Child("PLAC") != null)
-        result.Place = Place(structure.Child("PLAC"));
-      result.Citations.AddRange(structure
-          .Children("SOUR")
-          .Select(Citation));
+        result.Place = Place(structure.Child("PLAC"), db);
+      AddCommonFields(structure, result, db);
       return result;
     }
 
-    public Place Place(GStructure structure)
+    public Place Place(GStructure structure, Database db)
     {
       var result = new Place();
+      result.Id.Add(Guid.NewGuid().ToString("N"));
+      db.Add(result);
       result.Names.Add((string)structure);
+      AddCommonFields(structure, result, db);
       return result;
     }
 
-    public Citation Citation(GStructure structure)
+    public Citation Citation(GStructure structure, Database db)
     {
       var result = new Citation
       {
         RecordNumber = (string)structure.Child("_APID")
       };
-      result.SetPages((string)structure.Child("PAGE"));
       result.Id.Add((string)structure);
+      db.Add(result);
+      AddCommonFields(structure, result, db);
       if (structure.Child("DATA")?.Child("DATE") != null
           && structure.Child("DATA").Child("DATE").TryGetDateRange(out var dateRange))
       {
@@ -172,7 +199,77 @@ namespace GedcomParser
         {
           Text = note
         });
+
+      var page = (string)structure.Child("PAGE");
+      if (!string.IsNullOrEmpty(page))
+        page += string.Join("", structure.Child("PAGE").Children("CONC").Select(s => (string)s));
+      result.SetPages(page);
       return result;
+    }
+
+    private void AddCommonFields(GStructure structure, object primaryObject, Database db)
+    {
+      if (primaryObject is IHasAttributes attributes)
+      {
+        foreach (var attr in structure.Children().Where(s => s.Tag.StartsWith("_")))
+        {
+          var value = (string)attr;
+          if (!string.IsNullOrEmpty(value))
+          {
+            value += string.Join("", attr.Children("CONC").Select(s => (string)s));
+            attributes.Attributes[attr.Tag] = value;
+          }
+        }
+      }
+
+      if (primaryObject is IHasCitations citations)
+      {
+        citations.Citations.AddRange(structure
+          .Children("SOUR")
+          .Select(s => Citation(s, db)));
+      }
+
+      if (primaryObject is IHasId ids)
+      {
+        
+      }
+
+      if (primaryObject is IHasLinks hasLinks)
+      {
+        
+      }
+
+      if (primaryObject is IHasMedia mediaContainer)
+      {
+        foreach (var objId in structure
+          .Children("OBJE")
+          .Select(s => s.Pointer))
+        {
+          if (db.TryGetValue(objId, out Media media))
+            mediaContainer.Media.Add(media);
+        }
+      }
+
+      if (primaryObject is IHasNotes notes)
+      {
+        
+      }
+    }
+
+    private Media Media(GStructure structure, Database db)
+    {
+      var media = new Media
+      {
+        Src = (string)structure.Child("FILE"),
+      };
+      media.Id.Add(structure.Id);
+      if (structure.Child("DATE") != null
+        && structure.Child("DATE").TryGetDateRange(out var dateRange))
+        media.Date = dateRange;
+      if (!string.IsNullOrEmpty(media.Src))
+        media.Description = (string)structure.Child("FILE").Child("TITL");
+      AddCommonFields(structure, media, db);
+      return media;
     }
 
     private static bool TryGetEventType(string tag, out EventType eventType)
@@ -211,6 +308,8 @@ namespace GedcomParser
         case "MARR": eventType = EventType.Marriage; return true;
         case "MARS": eventType = EventType.MarriageSettlement; return true;
         case "RESI": eventType = EventType.Residence; return true;
+        case "_MILT": eventType = EventType.MilitaryService; return true;
+        case "EVEN": eventType = EventType.Generic; return true;
       }
       eventType = EventType.Generic;
       return false;
