@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace GedcomParser.Model
 {
@@ -20,6 +22,20 @@ namespace GedcomParser.Model
     public List<Link> Links { get; } = new List<Link>();
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
+
+    public string GetPreferredId(Database db)
+    {
+      var builder = new StringBuilder();
+      foreach (var part in new[] { StreetAddress, PostalCode, Locality, Country }
+        .Concat(Names.First().Split(',')))
+      {
+        var length = Math.Min(15, 30 - builder.Length);
+        if (length <= 0)
+          break;
+        Utilities.AddFirstLetters(part, length, builder, true);
+      }
+      return builder.ToString();
+    }
 
     public override string ToString()
     {

@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System;
+using System.Diagnostics;
 
 namespace GedcomParser.Model
 {
@@ -9,5 +10,10 @@ namespace GedcomParser.Model
 
     public string Text { get; set; }
     public string MimeType { get; set; }
+
+    public string GetPreferredId(Database db)
+    {
+      throw new NotImplementedException();
+    }
   }
 }

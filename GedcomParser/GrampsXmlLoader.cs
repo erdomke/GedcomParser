@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace GedcomParser
@@ -10,6 +11,7 @@ namespace GedcomParser
   internal class GrampsXmlLoader
   {
     private static XNamespace grampsNs = "http://gramps-project.org/xml/1.7.1/";
+    private Dictionary<string, Note> _importNotes = new Dictionary<string, Note>();
 
     private void BuildSchema(XElement element, string path, HashSet<string> paths)
     {
@@ -41,15 +43,17 @@ namespace GedcomParser
 
     public void Load(Database database, XElement root)
     {
-      foreach (var noteElement in root.Element(grampsNs + "notes").Elements(grampsNs + "note")
-        .Where(e => (string)e.Attribute("type") != "GEDCOM import"))
+      foreach (var noteElement in root.Element(grampsNs + "notes").Elements(grampsNs + "note"))
       {
         var note = new Note()
         {
           Text = (string)noteElement.Element(grampsNs + "text")
         };
         AddCommonFields(noteElement, note, database);
-        database.Add(note);
+        if ((string)noteElement.Attribute("type") == "GEDCOM import")
+          _importNotes.Add(note.Id.Last(), note);
+        else
+          database.Add(note);
       }
 
       foreach (var repositoryElement in root.Element(grampsNs + "repositories").Elements(grampsNs + "repository"))
@@ -237,10 +241,30 @@ namespace GedcomParser
         result.Title = (string)source.Element(grampsNs + "stitle");
         var pubInfo = (string)source.Element(grampsNs + "spubinfo");
         if (!string.IsNullOrEmpty(pubInfo))
+        {
           result.Publisher = new Organization()
           {
             Name = pubInfo
           };
+          var pubId = result.Publisher.GetPreferredId(db);
+          if (db.TryGetValue(pubId, out Organization publisher))
+          {
+            result.Publisher = publisher;
+          }
+          else
+          {
+            result.Publisher.Id.Add(pubId);
+            db.Add(result.Publisher);
+          }
+        }
+
+        var importNote = source.Elements(grampsNs + "noteref")
+          .Select(e => _importNotes.TryGetValue((string)e.Attribute("hlink"), out var note) ? note : null)
+          .FirstOrDefault(n => n != null)
+          ?.Text ?? "";
+        var match = Regex.Match(importNote, @": 2 DATE (\d.*)");
+        if (match.Success && ExtendedDateRange.TryParse(match.Groups[1].Value, out var pubDate))
+          result.DatePublished = pubDate;
       }
 
       if ((string)citationElement.Element(grampsNs + "srcattribute")?.Attribute("type") == "Url"

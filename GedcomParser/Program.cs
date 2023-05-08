@@ -10,13 +10,15 @@ namespace GedcomParser
   {
     static void Main(string[] args)
     {
-      var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged");
       var db = new Database();
-      new GedcomLoader().Load(db, structure);
-      //new GrampsXmlLoader().Load(db, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.gramps"));
+      new GedcomLoader().Load(db, GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged"));
       db.MakeIdsHumanReadable();
       new YamlWriter().Write(db, @"C:\Users\erdomke\source\GitHub\GedcomParser\D Family Tree(3).yaml");
-      ;
+
+      var db2 = new Database();
+      new GrampsXmlLoader().Load(db2, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.gramps"));
+      db2.MakeIdsHumanReadable();
+      new YamlWriter().Write(db2, @"C:\Users\erdomke\source\GitHub\GedcomParser\Gramps_2022-12-28.yaml");
     }
 
     static void RenderFamilyHtml(string[] args)

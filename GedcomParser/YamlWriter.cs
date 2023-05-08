@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml.Linq;
 using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
@@ -301,7 +302,19 @@ namespace GedcomParser
             mediaNode.Add("mimetype", media.MimeType);
           if (media.Date.HasValue)
             mediaNode.Add("date", media.Date.ToString("s"));
+
+          if (media.Place != null)
+          {
+            var place = new YamlMappingNode()
+            {
+              Style = YamlDotNet.Core.Events.MappingStyle.Flow
+            };
+            place.Add("$ref", "#/places/" + media.Place.Id.Primary);
+            mediaNode.Add("place", place);
+          }
+
           AddCommonProperties(mediaNode, media);
+          mediaRefs.Add(mediaNode);
         }
         if (mediaRefs.Any())
           mappingNode.Add("media", mediaRefs);

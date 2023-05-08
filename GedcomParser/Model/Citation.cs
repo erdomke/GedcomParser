@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
@@ -22,7 +21,7 @@ namespace GedcomParser.Model
     public Uri Url { get; set; }
     public string Doi { get; set; }
 
-    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
+    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Note> Notes { get; } = new List<Note>();
 
     public void SetPages(string page)
@@ -138,6 +137,79 @@ namespace GedcomParser.Model
       foreach (var note in Notes)
         builder.Append(note.Text);
       return builder.ToString().ToUpperInvariant();
+    }
+
+    public string GetPreferredId(Database db)
+    {
+      var builder = new StringBuilder();
+
+      if ((Attributes.TryGetValue("Year", out var year)
+        || Attributes.TryGetValue("Year(s)", out year)
+        || Attributes.TryGetValue("Residence Date", out year))
+        && year?.Length >= 4)
+        builder.Append(year.Substring(0, 4));
+      else if (Utilities.TryMatch(Pages + " " + Title, @"\b[1-2]\d{3}(s|-[1-2]\d{3})?\b", out var yearPattern))
+      {
+        builder.Append(yearPattern.Replace("s", "").Replace("-", ""));
+      }
+      else if (DatePublished.TryGetRange(out var start, out var _) && start.HasValue)
+      {
+        builder.Append(start.Value.ToString("yyyy"));
+      }
+
+      var parts = new List<string>();
+
+      if (Attributes.TryGetValue("Census Place", out var censusPlace))
+      {
+        builder.Append("Census");
+        if (Attributes.TryGetValue("Enumeration District", out var enumDistrict))
+          builder.Append(enumDistrict.TrimStart('0'));
+        parts.Add(censusPlace);
+      }
+      else if (Utilities.TryMatch(Title, @"\b(Census(es)?|Births?|Obituary|Marriage|Deaths?)\b", out var keyword))
+      {
+        builder.Append(keyword);
+      }
+
+      if (!string.IsNullOrEmpty(Author))
+        parts.Add(Author.Split('.')[0]);
+      if (Url != null)
+      {
+        var lastPart = default(string);
+        var idx = Url.PathAndQuery.TrimEnd('/').LastIndexOfAny(new[] { '?', '/' });
+        if (idx > 0)
+        {
+          lastPart = Url.PathAndQuery.Substring(idx + 1);
+          if (Url.PathAndQuery[idx] == '?')
+          {
+            lastPart = string.Join("", lastPart.Split('&')
+              .Select(k =>
+              {
+                var kvp = k.Split('=');
+                return kvp.Length == 2 ? Uri.UnescapeDataString(kvp[1]) : "";
+              }));
+          }
+          parts.Add(lastPart);
+        }
+      }
+      if ((!string.IsNullOrEmpty(year) && Attributes.TryGetValue("Home in " + year, out var title))
+        || Attributes.TryGetValue("Film Description", out title)
+        || Attributes.TryGetValue("Book Title", out title))
+        parts.Add(title);
+      else if (!string.IsNullOrEmpty(Title))
+        parts.Add(Title);
+      if (!string.IsNullOrEmpty(Pages))
+        parts.Add(Pages);
+
+      foreach (var part in parts)
+      {
+        var remaining = Math.Min(10, 30 - builder.Length);
+        if (remaining <= 0)
+          break;
+        Utilities.AddFirstLetters(part, 10, builder);
+      }
+
+      return builder.ToString();
     }
   }
 }

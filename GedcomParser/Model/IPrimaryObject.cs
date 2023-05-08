@@ -5,6 +5,8 @@ namespace GedcomParser.Model
   public interface IHasId
   {
     Identifiers Id { get; }
+
+    string GetPreferredId(Database db);
   }
 
   public interface IHasAttributes

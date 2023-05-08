@@ -1,13 +1,20 @@
 ﻿using GedcomParser.Model;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Xml.Linq;
+using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
 {
   public class GedcomLoader
   {
+    private Dictionary<string, GStructure> _sources = new Dictionary<string, GStructure>();
+    private HashSet<Citation> _citations = new HashSet<Citation>();
+    private Dictionary<string, Place> _places = new Dictionary<string, Place>(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, Organization> _orgs = new Dictionary<string, Organization>(StringComparer.OrdinalIgnoreCase);
+
     private void GetPaths(GStructure structure, string path, HashSet<string> paths)
     {
       if (structure.Children().Any())
@@ -25,6 +32,10 @@ namespace GedcomParser
 
     public void Load(Database database, GStructure structure)
     {
+      _sources = structure.Children("SOUR")
+        .Where(s => !string.IsNullOrEmpty(s.Id))
+        .ToDictionary(s => s.Id);
+
       foreach (var child in structure.Children("OBJE"))
         database.Add(Media(child, database));
       
@@ -171,57 +182,110 @@ namespace GedcomParser
     public Place Place(GStructure structure, Database db)
     {
       var result = new Place();
+      var name = ((string)structure)?.Trim(' ', ',').Replace(" ,", ",").Replace("  ", " ");
+      if (string.IsNullOrEmpty(name))
+        return null;
+      else if (_places.TryGetValue(name, out var place))
+        return place;
+      else
+        _places.Add(name, result);
+
       result.Id.Add(Guid.NewGuid().ToString("N"));
       db.Add(result);
-      result.Names.Add((string)structure);
+      result.Names.Add(name);
       AddCommonFields(structure, result, db);
       return result;
     }
 
-    public Citation Citation(GStructure structure, Database db)
+    private Organization Organization(string name, Database db)
+    {
+      if (_orgs.TryGetValue(name, out var result))
+        return result;
+      result = new Organization();
+      _orgs.Add(name, result);
+      result.Name = name;
+      result.Id.Add(Guid.NewGuid().ToString("N"));
+      db.Add(result);
+      return result;
+    }
+
+    private Citation Citation(GStructure structure, Database db)
     {
       var result = new Citation
       {
         RecordNumber = (string)structure.Child("_APID")
       };
-      result.Id.Add((string)structure);
+      result.Id.Add(Guid.NewGuid().ToString("N"));
       db.Add(result);
+
+      var notes = new List<string>();
+      if (_sources.TryGetValue(structure.Pointer, out var source))
+      {
+        result.Author = (string)source.Child("AUTH");
+        result.Title = (string)source.Child("TITL");
+        var publisher = (string)source.Child("PUBL");
+        if (!string.IsNullOrEmpty(publisher))
+          result.Publisher = Organization(publisher, db);
+        var repository = (string)source.Child("REPO");
+        if (!string.IsNullOrEmpty(repository))
+          result.Repository = Organization(repository, db);
+        var sourceNote = (string)source.Child("NOTE");
+        if (!string.IsNullOrEmpty(sourceNote))
+          notes.Add(sourceNote);
+        if (source.Child("PUBL")?.Child("DATE") != null
+          && source.Child("PUBL").Child("DATE").TryGetDateRange(out var pubDateRange))
+          result.DatePublished = pubDateRange;
+      }
+
       AddCommonFields(structure, result, db);
       if (structure.Child("DATA")?.Child("DATE") != null
           && structure.Child("DATA").Child("DATE").TryGetDateRange(out var dateRange))
       {
         result.DatePublished = dateRange;
       }
-      var note = (string)structure.Child("NOTE")
-        ?? (string)structure.Child("DATA")?.Child("NOTE");
-      if (!string.IsNullOrEmpty(note))
-        result.Notes.Add(new Note()
-        {
-          Text = note
-        });
+      var citeNote = (string)structure.Child("DATA")?.Child("NOTE");
+      if (!string.IsNullOrEmpty(citeNote))
+        notes.Add(citeNote);
+
+      foreach (var note in notes)
+      {
+        if (result.Url == null
+          && Uri.TryCreate(note, UriKind.Absolute, out var uri)
+          && uri.Scheme.StartsWith("http"))
+          result.Url = uri;
+        else
+          result.Notes.Add(new Note()
+          {
+            Text = note
+          });
+      }
 
       var page = (string)structure.Child("PAGE");
-      if (!string.IsNullOrEmpty(page))
-        page += string.Join("", structure.Child("PAGE").Children("CONC").Select(s => (string)s));
       result.SetPages(page);
-      return result;
+
+      if (_citations.Add(result))
+        return result;
+      return _citations.First(c => c.Equals(result));
+    }
+
+    private void AddCustomAttributes(GStructure structure, IHasAttributes attributes, string path)
+    {
+      foreach (var attr in structure.Children().Where(s => s.Tag.StartsWith("_")))
+      {
+        var key = string.IsNullOrEmpty(path) ? attr.Tag.TrimStart('_') : path + "." + attr.Tag.TrimStart('_');
+        var value = (string)attr;
+        if (!string.IsNullOrEmpty(value))
+          attributes.Attributes[key] = value;
+        if (attr.Children().Any())
+          AddCustomAttributes(attr, attributes, key);
+      }
     }
 
     private void AddCommonFields(GStructure structure, object primaryObject, Database db)
     {
       if (primaryObject is IHasAttributes attributes)
-      {
-        foreach (var attr in structure.Children().Where(s => s.Tag.StartsWith("_")))
-        {
-          var value = (string)attr;
-          if (!string.IsNullOrEmpty(value))
-          {
-            value += string.Join("", attr.Children("CONC").Select(s => (string)s));
-            attributes.Attributes[attr.Tag] = value;
-          }
-        }
-      }
-
+        AddCustomAttributes(structure, attributes, "");
+      
       if (primaryObject is IHasCitations citations)
       {
         citations.Citations.AddRange(structure
@@ -262,12 +326,22 @@ namespace GedcomParser
       {
         Src = (string)structure.Child("FILE"),
       };
+      new YamlScalarNode();
       media.Id.Add(structure.Id);
+      media.Place = Place(structure.Child("PLAC"), db);
       if (structure.Child("DATE") != null
         && structure.Child("DATE").TryGetDateRange(out var dateRange))
         media.Date = dateRange;
-      if (!string.IsNullOrEmpty(media.Src))
+      if (structure.Child("FILE") != null)
         media.Description = (string)structure.Child("FILE").Child("TITL");
+      if (string.IsNullOrEmpty(media.Description))
+      {
+        media.Description = (string)structure.Child("_DSCR");
+        media.Attributes.Remove("DSCR");
+      }
+      var rin = (string)structure.Child("RIN");
+      if (!string.IsNullOrEmpty(rin))
+        media.Attributes.Add("RIN", rin);
       AddCommonFields(structure, media, db);
       return media;
     }

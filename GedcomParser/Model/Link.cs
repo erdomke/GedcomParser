@@ -7,6 +7,12 @@ namespace GedcomParser.Model
     public Identifiers Id { get; } = new Identifiers();
 
     public Uri Url { get; set; }
+
     public string Description { get; set; }
+
+    public string GetPreferredId(Database db)
+    {
+      throw new NotImplementedException();
+    }
   }
 }

@@ -17,11 +17,22 @@ namespace GedcomParser.Model
     public ExtendedDateRange DeathDate => Events.FirstOrDefault(e => e.Type == EventType.Death)?.Date ?? default;
     public List<IndividualName> Names { get; } = new List<IndividualName>();
     public List<Event> Events { get; } = new List<Event>();
-    
-    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
+
+    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();
     public List<Link> Links { get; } = new List<Link>();
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
+
+    public string GetPreferredId(Database db)
+    {
+      var builder = new StringBuilder();
+      var name = Names.FirstOrDefault().Name;
+      Utilities.AddFirstLetters(name.Surname, 10, builder);
+      Utilities.AddFirstLetters(name.Remaining, 10, builder);
+      if (BirthDate.TryGetRange(out var start, out var _) && start.HasValue)
+        builder.Append(start.Value.ToString("yyyyMMdd"));
+      return builder.ToString();
+    }
   }
 }

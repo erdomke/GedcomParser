@@ -28,90 +28,16 @@ namespace GedcomParser.Model
 
     public void MakeIdsHumanReadable()
     {
-      UpdateIndices(Individuals(), i =>
-      {
-        var builder = new StringBuilder();
-        var name = i.Names.FirstOrDefault().Name;
-        AddFirstLetters(name.Surname, 10, builder);
-        AddFirstLetters(name.Remaining, 10, builder);
-        if (i.BirthDate.TryGetRange(out var start, out var _) && start.HasValue)
-          builder.Append(start.Value.ToString("yyyyMMdd"));
-        return builder.ToString();
-      });
-
-      UpdateIndices(Places(), p =>
-      {
-        var builder = new StringBuilder();
-        foreach (var part in p.Names.First().Split(','))
-        {
-          var length = Math.Min(15, 30 - builder.Length);
-          if (length <= 0)
-            break;
-          AddFirstLetters(part, length, builder);
-        }
-        return builder.ToString();
-      });
-
-      UpdateIndices(Families(), f =>
-      {
-        var builder = new StringBuilder("F_");
-        foreach (var parentName in FamilyLinks(f, FamilyLinkType.Parent)
-          .Select(l => TryGetValue(l.Individual, out Individual individual) ? individual.Name : default(PersonName))
-          .Where(n => n.Name.Length > 0)
-          .Select(n => n.Surname ?? n.Remaining)
-          .Distinct()
-          .Take(2))
-          AddFirstLetters(parentName, 10, builder);
-        var marriage = f.Events.FirstOrDefault(e => e.Type == EventType.Marriage);
-        if (marriage != null && marriage.Date.TryGetRange(out var start, out var _) && start.HasValue)
-          builder.Append(start.Value.ToString("yyyy"));
-        return builder.ToString();
-      });
-
-      UpdateIndices(Citations(), c =>
-      {
-        var builder = new StringBuilder();
-        if (c.DatePublished.TryGetRange(out var start, out var _) && start.HasValue)
-        {
-          builder.Append(start.Value.ToString("yyyy"));
-        }
-        else
-        {
-          var match = Regex.Match(c.Title + c.Pages, @"\b[1-2]\d{3}s?\b");
-          if (match.Success)
-            builder.Append(match.Value.TrimEnd('s'));
-        }
-        var parts = new List<string>();
-        if (!string.IsNullOrEmpty(c.Author))
-          parts.Add(c.Author);
-        if (c.Url != null)
-        {
-          var idx = c.Url.PathAndQuery.LastIndexOfAny(new[] { '?', '/' });
-          if (idx > 0 && c.Url.PathAndQuery[idx] == '?')
-            idx = c.Url.PathAndQuery.IndexOf('=', idx);
-          if (idx > 0)
-            parts.Add(c.Url.PathAndQuery.Substring(idx + 1));
-        }
-        if (!string.IsNullOrEmpty(c.Title))
-          parts.Add(c.Title);
-        if (!string.IsNullOrEmpty(c.Pages))
-          parts.Add(c.Pages);
-
-        foreach (var part in parts)
-        {
-          var remaining = Math.Min(10, 30 - builder.Length);
-          if (remaining <= 0)
-            break;
-          AddFirstLetters(part, 10, builder);
-        }
-
-        return builder.ToString();
-      });
+      UpdateIndices(Citations());
+      UpdateIndices(Families());
+      UpdateIndices(Individuals());
+      UpdateIndices(Organizations());
+      UpdateIndices(Places());
     }
 
-    private void UpdateIndices<T>(IEnumerable<T> objects, Func<T, string> keyGetter) where T : IHasId
+    private void UpdateIndices<T>(IEnumerable<T> objects) where T : IHasId
     {
-      foreach (var group in objects.GroupBy(keyGetter, StringComparer.OrdinalIgnoreCase))
+      foreach (var group in objects.GroupBy(i => i.GetPreferredId(this), StringComparer.OrdinalIgnoreCase))
       {
         var addIndex = group.Skip(1).Any();
         var i = 0;
@@ -121,22 +47,6 @@ namespace GedcomParser.Model
           if (obj.Id.Add(newId, true))
             _nodes.Add(newId, obj);
           i++;
-        }
-      }
-    }
-
-    private void AddFirstLetters(string value, int count, StringBuilder builder)
-    {
-      if (value == null)
-        return;
-
-      var letters = 0;
-      for (var i = 0; i < value.Length && letters < count; i++)
-      {
-        if (char.IsLetter(value[i]))
-        {
-          letters++;
-          builder.Append(value[i]);
         }
       }
     }

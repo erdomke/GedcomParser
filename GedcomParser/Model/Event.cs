@@ -1,5 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Text;
 
 namespace GedcomParser.Model
 {
@@ -14,10 +17,21 @@ namespace GedcomParser.Model
     public Place Place { get; set; }
     public Organization Organization { get; set; }
 
-    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
+    public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();
     public List<Link> Links { get; } = new List<Link>();
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
+
+    public string GetPreferredId(Database db)
+    {
+      var builder = new StringBuilder();
+      if (Date.HasValue)
+        builder.Append(Date.ToString("yyyyMMdd"));
+      builder.Append(TypeString ?? Type.ToString());
+      if (Place != null)
+        Utilities.AddFirstLetters(Place.Names.First(), 15, builder);
+      return builder.ToString();
+    }
   }
 }
