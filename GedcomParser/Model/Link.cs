@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 
 namespace GedcomParser.Model
 {
@@ -9,6 +10,11 @@ namespace GedcomParser.Model
     public Uri Url { get; set; }
 
     public string Description { get; set; }
+
+    public void BuildEqualityString(StringBuilder builder, Database db)
+    {
+      throw new NotImplementedException();
+    }
 
     public string GetPreferredId(Database db)
     {

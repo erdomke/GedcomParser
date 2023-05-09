@@ -20,6 +20,7 @@ namespace GedcomParser.Model
     public string RecordNumber { get; set; }
     public Uri Url { get; set; }
     public string Doi { get; set; }
+    public string Src { get; set; }
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Note> Notes { get; } = new List<Note>();
@@ -120,22 +121,8 @@ namespace GedcomParser.Model
 
     public string ToEqualityString()
     {
-      var builder = new StringBuilder()
-        .Append(Author?.Trim())
-        .Append(Title?.Trim())
-        .Append(PublicationTitle?.Trim())
-        .Append(Pages?.Trim())
-        .Append(DatePublished.ToString("s"))
-        .Append(DateAccessed.ToString("s"))
-        .Append(RecordNumber?.Trim())
-        .Append(Publisher?.Id.Primary)
-        .Append(Repository?.Id.Primary)
-        .Append(Url?.ToString())
-        .Append(Doi?.Trim());
-      foreach (var attr in Attributes)
-        builder.Append(attr.Key).Append(attr.Value);
-      foreach (var note in Notes)
-        builder.Append(note.Text);
+      var builder = new StringBuilder();
+      BuildEqualityString(builder, null);
       return builder.ToString().ToUpperInvariant();
     }
 
@@ -210,6 +197,23 @@ namespace GedcomParser.Model
       }
 
       return builder.ToString();
+    }
+
+    public void BuildEqualityString(StringBuilder builder, Database db)
+    {
+      builder.Append(Author?.Trim())
+        .Append(Title?.Trim())
+        .Append(PublicationTitle?.Trim())
+        .Append(Pages?.Trim())
+        .Append(DatePublished.ToString("s"))
+        .Append(DateAccessed.ToString("s"))
+        .Append(RecordNumber?.Trim())
+        .Append(Publisher?.Id.Primary)
+        .Append(Repository?.Id.Primary)
+        .Append(Src?.ToString())
+        .Append(Url?.ToString())
+        .Append(Doi?.Trim());
+      Utilities.BuildEqualityString(this, builder);
     }
   }
 }

@@ -124,6 +124,8 @@ namespace GedcomParser
         node.Add("record_number", citation.RecordNumber);
       if (!string.IsNullOrEmpty(citation.Doi))
         node.Add("doi", citation.Doi);
+      if (!string.IsNullOrEmpty(citation.Src))
+        node.Add("src", citation.Src);
       if (citation.Url != null)
         node.Add("url", citation.Url.ToString());
       AddCommonProperties(node, citation);
@@ -260,7 +262,7 @@ namespace GedcomParser
     {
       if (primaryObject is IHasAttributes hasAttributes)
       {
-        foreach (var attr in hasAttributes.Attributes)
+        foreach (var attr in hasAttributes.Attributes.OrderBy(a => a.Key))
         {
           mappingNode.Add("_" + attr.Key, attr.Value); 
         }
@@ -291,7 +293,8 @@ namespace GedcomParser
       if (primaryObject is IHasMedia hasMedia)
       {
         var mediaRefs = new YamlSequenceNode();
-        foreach (var media in hasMedia.Media)
+        foreach (var media in hasMedia.Media
+          .OrderBy(m => m.Src ?? m.Description ?? ""))
         {
           var mediaNode = new YamlMappingNode();
           if (!string.IsNullOrEmpty(media.Src))
@@ -323,7 +326,7 @@ namespace GedcomParser
       if (primaryObject is IHasLinks hasLinks)
       {
         var links = new YamlSequenceNode();
-        foreach (var link in hasLinks.Links)
+        foreach (var link in hasLinks.Links.OrderBy(l => l.Url?.ToString() ?? ""))
         {
           if (!string.IsNullOrEmpty(link.Description))
           {
@@ -345,7 +348,7 @@ namespace GedcomParser
       if (primaryObject is IHasCitations hasCitations)
       {
         var citations = new YamlSequenceNode();
-        foreach (var citation in hasCitations.Citations)
+        foreach (var citation in hasCitations.Citations.OrderBy(c => c.Id.Primary ?? ""))
         {
           citations.Add(new YamlMappingNode()
           {

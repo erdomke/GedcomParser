@@ -2,6 +2,7 @@
 using SixLabors.Fonts;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace GedcomParser
@@ -10,15 +11,35 @@ namespace GedcomParser
   {
     static void Main(string[] args)
     {
-      var db = new Database();
-      new GedcomLoader().Load(db, GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged"));
-      db.MakeIdsHumanReadable();
-      new YamlWriter().Write(db, @"C:\Users\erdomke\source\GitHub\GedcomParser\D Family Tree(3).yaml");
+      //var db = new Database();
+      //new GedcomLoader().Load(db, GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged"));
+      //db.MakeIdsHumanReadable();
+
+      //var mediaRoot = @"C:\Users\erdomke\Documents\Gramps\Ancestry\";
+      //using (var doc = JsonDocument.Parse(File.ReadAllText(mediaRoot + "index.json")))
+      //{
+      //  var records = doc.RootElement.GetProperty("records").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString());
+      //  foreach (var citation in db.Citations().Where(c => c.RecordNumber != null))
+      //  {
+      //    if (records.TryGetValue(citation.RecordNumber.Split(':').Last(), out var path))
+      //      citation.Src = mediaRoot + path;
+      //  }
+
+      //  var mediaXref = doc.RootElement.GetProperty("media").EnumerateObject().ToDictionary(p => p.Name, p => p.Value.GetString());
+      //  foreach (var media in db.GetValues<IHasMedia>()
+      //    .SelectMany(h => h.Media))
+      //  {
+      //    if (media.Attributes.TryGetValue("RIN", out var rin)
+      //      && mediaXref.TryGetValue(rin, out var path))
+      //      media.Src = mediaRoot + path;
+      //  }
+      //}
+      //new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree2.gen.yaml");
 
       var db2 = new Database();
-      new GrampsXmlLoader().Load(db2, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.gramps"));
+      new GrampsXmlLoader().Load(db2, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2023-05-08.gramps"));
       db2.MakeIdsHumanReadable();
-      new YamlWriter().Write(db2, @"C:\Users\erdomke\source\GitHub\GedcomParser\Gramps_2022-12-28.yaml");
+      new YamlWriter().Write(db2, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
     }
 
     static void RenderFamilyHtml(string[] args)

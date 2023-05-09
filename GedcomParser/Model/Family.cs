@@ -17,6 +17,20 @@ namespace GedcomParser.Model
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
 
+    public void BuildEqualityString(StringBuilder builder, Database db)
+    {
+      builder.Append(Type.ToString());
+      foreach (var parentName in db.FamilyLinks(this, FamilyLinkType.Parent)
+        .Concat(db.FamilyLinks(this, FamilyLinkType.Child))
+        .Select(l => db.TryGetValue(l.Individual, out Individual individual) ? individual.Name : default(PersonName))
+        .Where(n => n.Name.Length > 0)
+        .Distinct())
+        builder.Append(parentName);
+      foreach (var e in Events)
+        builder.Append(e.TypeString ?? e.Type.ToString()).Append(e.Date.ToString("s"));
+      Utilities.BuildEqualityString(this, builder);
+    }
+
     public string GetPreferredId(Database db)
     {
       var builder = new StringBuilder("F_");

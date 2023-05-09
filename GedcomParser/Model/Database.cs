@@ -40,13 +40,11 @@ namespace GedcomParser.Model
       foreach (var group in objects.GroupBy(i => i.GetPreferredId(this), StringComparer.OrdinalIgnoreCase))
       {
         var addIndex = group.Skip(1).Any();
-        var i = 0;
         foreach (var obj in group)
         {
-          var newId = group.Key + (addIndex ? i.ToString("D2") : "");
+          var newId = group.Key + (addIndex ? "_" + obj.Checksum(this).Substring(0, 5) : "");
           if (obj.Id.Add(newId, true))
             _nodes.Add(newId, obj);
-          i++;
         }
       }
     }
@@ -125,6 +123,11 @@ namespace GedcomParser.Model
       if (!TryGetValue(id, out T result))
         throw new InvalidOperationException($"Cannot find {typeof(T).Name} with id {id}");
       return result;
+    }
+
+    public IEnumerable<T> GetValues<T>()
+    {
+      return _nodes.Values.OfType<T>().Distinct();
     }
 
     public bool TryGetValue<T>(string id, out T primary) where T : IHasId

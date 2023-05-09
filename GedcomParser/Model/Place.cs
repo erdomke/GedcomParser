@@ -23,6 +23,14 @@ namespace GedcomParser.Model
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
 
+    public void BuildEqualityString(StringBuilder builder, Database db)
+    {
+      builder.Append(Latitude?.ToString())
+        .Append(Longitude?.ToString())
+        .Append(Names.FirstOrDefault());
+      Utilities.BuildEqualityString(this, builder);
+    }
+
     public string GetPreferredId(Database db)
     {
       var builder = new StringBuilder();

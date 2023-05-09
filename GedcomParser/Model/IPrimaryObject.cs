@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Text;
 
 namespace GedcomParser.Model
 {
@@ -6,6 +7,7 @@ namespace GedcomParser.Model
   {
     Identifiers Id { get; }
 
+    void BuildEqualityString(StringBuilder builder, Database db);
     string GetPreferredId(Database db);
   }
 

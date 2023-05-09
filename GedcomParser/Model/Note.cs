@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Text;
 
 namespace GedcomParser.Model
 {
@@ -10,6 +11,11 @@ namespace GedcomParser.Model
 
     public string Text { get; set; }
     public string MimeType { get; set; }
+
+    public void BuildEqualityString(StringBuilder builder, Database db)
+    {
+      throw new NotImplementedException();
+    }
 
     public string GetPreferredId(Database db)
     {

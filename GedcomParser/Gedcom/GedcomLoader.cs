@@ -3,6 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Net.NetworkInformation;
+using System.Xml;
 using System.Xml.Linq;
 using YamlDotNet.RepresentationModel;
 
@@ -238,6 +240,7 @@ namespace GedcomParser
       }
 
       AddCommonFields(structure, result, db);
+      result.Attributes.Remove("APID");
       if (structure.Child("DATA")?.Child("DATE") != null
           && structure.Child("DATA").Child("DATE").TryGetDateRange(out var dateRange))
       {
@@ -256,7 +259,8 @@ namespace GedcomParser
         else
           result.Notes.Add(new Note()
           {
-            Text = note
+            Text = note,
+            MimeType = note.IndexOf("</") > 0 ? "text/html" : null
           });
       }
 
@@ -274,8 +278,8 @@ namespace GedcomParser
       {
         var key = string.IsNullOrEmpty(path) ? attr.Tag.TrimStart('_') : path + "." + attr.Tag.TrimStart('_');
         var value = (string)attr;
-        if (!string.IsNullOrEmpty(value))
-          attributes.Attributes[key] = value;
+        if (!string.IsNullOrWhiteSpace(value))
+          attributes.Attributes[key] = value.Trim();
         if (attr.Children().Any())
           AddCustomAttributes(attr, attributes, key);
       }
@@ -322,11 +326,10 @@ namespace GedcomParser
 
     private Media Media(GStructure structure, Database db)
     {
-      var media = new Media
+      var media = new Media()
       {
         Src = (string)structure.Child("FILE"),
       };
-      new YamlScalarNode();
       media.Id.Add(structure.Id);
       media.Place = Place(structure.Child("PLAC"), db);
       if (structure.Child("DATE") != null
@@ -334,15 +337,54 @@ namespace GedcomParser
         media.Date = dateRange;
       if (structure.Child("FILE") != null)
         media.Description = (string)structure.Child("FILE").Child("TITL");
-      if (string.IsNullOrEmpty(media.Description))
-      {
-        media.Description = (string)structure.Child("_DSCR");
-        media.Attributes.Remove("DSCR");
-      }
+
       var rin = (string)structure.Child("RIN");
       if (!string.IsNullOrEmpty(rin))
         media.Attributes.Add("RIN", rin);
       AddCommonFields(structure, media, db);
+
+      if (media.Attributes.TryGetValue("META", out var meta))
+      {
+        try
+        {
+          var metaXml = XElement.Parse(meta);
+          if (metaXml.Name.LocalName == "metadataxml")
+          {
+            media.Attributes.Remove("META");
+            foreach (var child in metaXml.Elements())
+            {
+              if (child.Name.LocalName == "content")
+              {
+                var note = new Note()
+                {
+                  Text = string.Join("\r\n", child.Elements("line")
+                    .Select(e => (string)e)).Trim()
+                };
+                if (note.Text.IndexOf("</") > 0)
+                  note.MimeType = "text/html";
+                media.Notes.Add(note);
+              }
+              else if (child.Name.LocalName == "personas"
+                && !string.IsNullOrEmpty((string)child))
+              {
+                media.Attributes.Add(child.Name.LocalName, (string)child);
+              }
+            }
+          }
+        }
+        catch (XmlException) { }
+      }
+
+      if (media.Attributes.TryGetValue("ORIG.URL", out var origUrl)
+        && Uri.TryCreate(origUrl, UriKind.Absolute, out var uri)
+        && uri.Scheme.StartsWith("http"))
+      {
+        media.Attributes.Remove("ORIG.URL");
+        media.Links.Add(new Link()
+        {
+          Url = uri
+        });
+      }
       return media;
     }
 

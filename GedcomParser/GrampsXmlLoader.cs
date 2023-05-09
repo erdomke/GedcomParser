@@ -79,6 +79,8 @@ namespace GedcomParser
         if (file != null)
         {
           obj.Src = (string)file.Attribute("src");
+          if (obj.Src == ".")
+            obj.Src = null;
           obj.MimeType = (string)file.Attribute("mime");
           obj.Description = (string)file.Attribute("description");
           if (obj.Description == Path.GetFileNameWithoutExtension(obj.Src))
