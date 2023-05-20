@@ -101,9 +101,9 @@ namespace GedcomParser
       {
         var individual = new Individual();
         AddCommonFields(individualElement, individual, database);
-        if ((string)individualElement.Attribute("gender") == "M")
+        if ((string)individualElement.Element(grampsNs + "gender") == "M")
           individual.Sex = Sex.Male;
-        if ((string)individualElement.Attribute("gender") == "F")
+        if ((string)individualElement.Element(grampsNs + "gender") == "F")
           individual.Sex = Sex.Female;
         foreach (var name in individualElement.Elements(grampsNs + "name"))
         {

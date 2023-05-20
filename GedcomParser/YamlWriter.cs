@@ -138,13 +138,16 @@ namespace GedcomParser
         && (string.IsNullOrEmpty(name.Surname) || name.Name.Surname == name.Surname)
         && (string.IsNullOrEmpty(name.GivenName) || name.Name.Remaining == name.GivenName))
       {
-        if (name.Type == NameType.Birth)
+        if (name.Type == NameType.Birth
+          && name.Citations.Count < 1
+          && name.Notes.Count < 1)
           return new YamlScalarNode(name.Name.ToMarkup());
         
         var node = new YamlMappingNode();
         node.Add("name", name.Name.ToMarkup());
         if (name.Type != NameType.Other)
           node.Add("type", name.Type.ToString());
+        AddCommonProperties(node, name);
         return node;
       }
       else
@@ -174,6 +177,8 @@ namespace GedcomParser
             translations.Add(trans.Key, Visit(trans.Value));
           node.Add("langs", translations);
         }
+
+        AddCommonProperties(node, name);
 
         return node;
       }

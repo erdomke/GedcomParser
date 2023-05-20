@@ -121,18 +121,17 @@ namespace GedcomParser
       };
 
       var type = structure.Child("TYPE");
-      if (type != null)
+      if (Enum.TryParse<NameType>((string)type ?? "Birth", true, out var nameType))
       {
-        if (Enum.TryParse<NameType>((string)type ?? "Other", true, out var nameType))
-        {
-          result.Type = nameType;
-          result.TypeString = (string)type.Child("PHRASE");
-        }
-        else
-        {
-          result.TypeString = (string)type;
+        result.Type = nameType;
+        result.TypeString = (string)type?.Child("PHRASE");
+        if (!string.IsNullOrEmpty(result.TypeString))
           result.Type = NameType.Other;
-        }
+      }
+      else
+      {
+        result.TypeString = (string)type;
+        result.Type = NameType.Other;
       }
       result.NamePrefix = (string)structure.Child("NPFX");
       result.GivenName = (string)structure.Child("GIVN");
