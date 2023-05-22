@@ -193,7 +193,28 @@ namespace GedcomParser
 
       result.Id.Add(Guid.NewGuid().ToString("N"));
       db.Add(result);
-      result.Names.Add(name);
+      var placeName = new PlaceName()
+      {
+        Name = name
+      };
+      var form = (string)structure.Child("FORM");
+      if (!string.IsNullOrWhiteSpace(form))
+      {
+        var formParts = form.Split(',').Select(p => p.Trim()).ToList();
+        var nameParts = name.Split(',').Select(p => p.Trim()).ToList();
+        if (nameParts.Count == formParts.Count)
+        {
+          for (var i = 0; i < nameParts.Count; i++)
+          {
+            if (!string.IsNullOrEmpty(formParts[i])
+              && !string.IsNullOrEmpty(nameParts[i]))
+            {
+              placeName.Parts.Add(new KeyValuePair<string, string>(formParts[i], nameParts[i]));
+            }
+          }
+        }
+      }
+      result.Names.Add(placeName);
       AddCommonFields(structure, result, db);
       return result;
     }

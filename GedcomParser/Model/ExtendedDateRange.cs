@@ -220,9 +220,10 @@ namespace GedcomParser
         }
       }
       else if (value.StartsWith("AFT ", StringComparison.OrdinalIgnoreCase)
-          || value.StartsWith("AFTER ", StringComparison.OrdinalIgnoreCase))
+        || value.StartsWith("AFTER ", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("> ", StringComparison.OrdinalIgnoreCase))
       {
-        var startIdx = value.StartsWith("AFT ", StringComparison.OrdinalIgnoreCase) ? 4 : 6;
+        var startIdx = value.IndexOf(' ') + 1;
         range = new ExtendedDateRange() { Type = DateRangeType.Range };
         if (ExtendedDateTime.TryParse(value.Substring(startIdx), provider, out var start))
           range.Start = start;
@@ -230,9 +231,10 @@ namespace GedcomParser
           return false;
       }
       else if (value.StartsWith("BEF ", StringComparison.OrdinalIgnoreCase)
-          || value.StartsWith("BEFORE ", StringComparison.OrdinalIgnoreCase))
+        || value.StartsWith("BEFORE ", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("< ", StringComparison.OrdinalIgnoreCase))
       {
-        var startIdx = value.StartsWith("BEF ", StringComparison.OrdinalIgnoreCase) ? 4 : 7;
+        var startIdx = value.IndexOf(' ') + 1;
         range = new ExtendedDateRange() { Type = DateRangeType.Range };
         if (ExtendedDateTime.TryParse(value.Substring(startIdx), provider, out var end))
           range.End = end;

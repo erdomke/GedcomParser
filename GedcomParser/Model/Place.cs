@@ -8,14 +8,14 @@ namespace GedcomParser.Model
   public class Place : IPrimaryObject
   {
     public Identifiers Id { get; } = new Identifiers();
-
+    public List<double> BoundingBox { get; } = new List<double>();
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
-    public List<string> Names { get; } = new List<string>();
-    public string Country { get; set; }
-    public string Locality { get; set; }
-    public string StreetAddress { get; set; }
-    public string PostalCode { get; set; }
+    public List<PlaceName> Names { get; } = new List<PlaceName>();
+    //public string Country { get; set; }
+    //public string Locality { get; set; }
+    //public string StreetAddress { get; set; }
+    //public string PostalCode { get; set; }
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
     public List<Citation> Citations { get; } = new List<Citation>();
@@ -34,8 +34,11 @@ namespace GedcomParser.Model
     public string GetPreferredId(Database db)
     {
       var builder = new StringBuilder();
-      foreach (var part in new[] { StreetAddress, PostalCode, Locality, Country }
-        .Concat(Names.First().Split(',')))
+      var nameParts = Names.First().Parts.Select(p => p.Value).ToList();
+      if (!string.IsNullOrEmpty(Names.First().Name))
+        nameParts.AddRange(Names.First().Name.Split(',').Select(p => p.Trim()));
+
+      foreach (var part in nameParts)
       {
         var length = Math.Min(15, 30 - builder.Length);
         if (length <= 0)
@@ -47,7 +50,7 @@ namespace GedcomParser.Model
 
     public override string ToString()
     {
-      return Names.FirstOrDefault();
+      return Names.FirstOrDefault().Name;
     }
   }
 }

@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Xml.Linq;
+using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
@@ -154,7 +154,7 @@ namespace GedcomParser
       {
         var node = new YamlMappingNode();
         if (!string.IsNullOrEmpty(name.Name.Name))
-          node.Add("name", name.Name.ToString());
+          node.Add("name", name.Name.ToMarkup());
         if (name.Type != NameType.Other)
           node.Add("type", name.Type.ToString());
         if (!string.IsNullOrEmpty(name.NamePrefix))
@@ -238,22 +238,35 @@ namespace GedcomParser
       return node;
     }
 
+    private YamlNode Visit(PlaceName placeName)
+    {
+      if (placeName.Parts.Count < 1 && !placeName.Date.HasValue)
+        return new YamlScalarNode(placeName.Name);
+
+      var mapping = new YamlMappingNode();
+      if (!string.IsNullOrEmpty(placeName.Name))
+        mapping.Add("name", placeName.Name);
+      if (placeName.Date.HasValue)
+        mapping.Add("date", placeName.Date.ToString("s"));
+      foreach (var part in placeName.Parts)
+        mapping.Add(part.Key, part.Value);
+      AddCommonProperties(mapping, placeName);
+      return mapping;
+    }
+
     private YamlMappingNode Visit(Place place)
     {
       var node = new YamlMappingNode();
       if (place.Names.Count == 1)
-        node.Add("name", place.Names[0]);
+        node.Add("name", Visit(place.Names[0]));
       else
-        node.Add("names", new YamlSequenceNode(place.Names.Select(i => new YamlScalarNode(i))));
+        node.Add("names", new YamlSequenceNode(place.Names.Select(i => Visit(i))));
 
-      if (!string.IsNullOrEmpty(place.Country))
-        node.Add("country", place.Country);
-      if (!string.IsNullOrEmpty(place.PostalCode))
-        node.Add("postal_code", place.PostalCode);
-      if (!string.IsNullOrEmpty(place.Locality))
-        node.Add("locality", place.Locality);
-      if (!string.IsNullOrEmpty(place.StreetAddress))
-        node.Add("street_address", place.StreetAddress);
+      if (place.BoundingBox.Count > 0)
+        node.Add("bbox", new YamlSequenceNode(place.BoundingBox.Select(v => new YamlScalarNode(v.ToString())))
+        {
+          Style = SequenceStyle.Flow
+        });
       if (place.Latitude.HasValue)
         node.Add("latitude", place.Latitude.Value.ToString());
       if (place.Longitude.HasValue)

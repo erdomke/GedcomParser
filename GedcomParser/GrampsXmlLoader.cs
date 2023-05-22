@@ -160,10 +160,13 @@ namespace GedcomParser
           };
           AddCommonFields(addressRef, eventObj, database);
           eventObj.Place.Id.Add(Guid.NewGuid().ToString("N"));
-          eventObj.Place.Names.Add(string.Join(", ", addressRef.Elements()
-            .Where(e => _addressPartsOrder.ContainsKey(e.Name.LocalName))
+          var placeName = new PlaceName();
+          placeName.Parts.AddRange(addressRef.Elements()
+            .Where(e => _addressPartsOrder.ContainsKey(e.Name.LocalName) && !string.IsNullOrEmpty((string)e))
             .OrderBy(e => _addressPartsOrder[e.Name.LocalName])
-            .Select(e => (string)e)));
+            .Select(e => new KeyValuePair<string, string>(e.Name.LocalName, (string)e)));
+          placeName.Name = string.Join(", ", placeName.Parts.Select(k => k.Value));
+          eventObj.Place.Names.Add(placeName);
           database.Add(eventObj.Place);
           if (TryGetDate(addressRef, out var date))
             eventObj.Date = date;
@@ -406,8 +409,16 @@ namespace GedcomParser
     {
       var place = new Place();
       AddCommonFields(placeInfo, place, db);
-      place.Names.AddRange(placeInfo.Elements(grampsNs + "pname").Select(e => (string)e.Attribute("value")));
-      place.Names.AddRange(placeInfo.Elements(grampsNs + "ptitle").Select(e => (string)e));
+      place.Names.AddRange(placeInfo.Elements(grampsNs + "pname")
+        .Select(e => new PlaceName()
+        {
+          Name = (string)e.Attribute("value")
+        }));
+      place.Names.AddRange(placeInfo.Elements(grampsNs + "ptitle")
+        .Select(e => new PlaceName()
+        {
+          Name = (string)e
+        }));
       place.Latitude = (double?)placeInfo.Element(grampsNs + "coord")?.Attribute("lat");
       place.Longitude = (double?)placeInfo.Element(grampsNs + "coord")?.Attribute("long");
       return place;

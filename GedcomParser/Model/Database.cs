@@ -61,8 +61,6 @@ namespace GedcomParser.Model
             foreach (var iEvent in individual.Events)
             {
               _whereUsed.Add(iEvent, individual);
-              if (!toProcess.Contains(iEvent))
-                toProcess.Add(iEvent);
             }
             foreach (var family in individual.Id
               .SelectMany(i => _relationships[i])
@@ -75,18 +73,48 @@ namespace GedcomParser.Model
             foreach (var fEvent in family.Events)
             {
               _whereUsed.Add(fEvent, family);
-              if (!toProcess.Contains(fEvent))
-                toProcess.Add(fEvent);
             }
           }
           else if (toProcess[i] is Event eventInfo)
           {
             if (eventInfo.Place != null)
               _whereUsed.Add(eventInfo.Place, eventInfo);
-            foreach (var obj in eventInfo.Notes)
-              _whereUsed.Add(obj, eventInfo);
-            foreach (var obj in eventInfo.Citations)
-              _whereUsed.Add(obj, eventInfo);
+          }
+          else if (toProcess[i] is Organization organization)
+          {
+            if (organization.Place != null)
+              _whereUsed.Add(organization.Place, organization);
+          }
+
+          if (toProcess[i] is IHasCitations hasCitations)
+          {
+            foreach (var citation in hasCitations.Citations)
+              _whereUsed.Add(citation, toProcess[i]);
+          }
+
+          if (toProcess[i] is IHasLinks hasLinks)
+          {
+            foreach (var link in hasLinks.Links)
+              _whereUsed.Add(link, toProcess[i]);
+          }
+
+          if (toProcess[i] is IHasMedia hasMedia)
+          {
+            foreach (var media in hasMedia.Media)
+              _whereUsed.Add(media, toProcess[i]);
+          }
+
+          if (toProcess[i] is IHasNotes hasNotes)
+          {
+            foreach (var note in hasNotes.Notes)
+              _whereUsed.Add(note, toProcess[i]);
+          }
+
+          if (i == toProcess.Count - 1)
+          {
+            toProcess.AddRange(_whereUsed
+              .Select(g => g.Key)
+              .Where(o => !toProcess.Contains(o)));
           }
         }
       }

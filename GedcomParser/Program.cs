@@ -4,12 +4,41 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Xml.Linq;
+using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
 {
   class Program
   {
+    static void Main__(string[] args)
+    {
+      var db = new Database();
+      var yaml = new YamlStream();
+      using (var reader = new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"))
+        yaml.Load(reader);
+      var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
+      new YamlLoader().Load(db, mapping);
+      foreach (var place in db.Places())
+      {
+
+      }
+    }
+
     static void Main(string[] args)
+    {
+      var db = new Database();
+      var yaml = new YamlStream();
+      using (var reader = new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"))
+        yaml.Load(reader);
+      var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
+      var yaml2 = new YamlStream();
+      yaml2.Load(new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree_Ancestry.gen.yaml"));
+      
+      new YamlLoader().Load(db, mapping, new[] { (YamlMappingNode)yaml2.Documents[0].RootNode });
+      new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+    }
+
+    static void Main_Convert(string[] args)
     {
       var db = new Database();
       new GedcomLoader().Load(db, GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged"));

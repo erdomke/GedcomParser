@@ -39,7 +39,7 @@ namespace GedcomParser.Model
         builder.Append(Date.ToString("yyyyMMdd"));
       builder.Append(TypeString ?? Type.ToString());
       if (Place != null)
-        Utilities.AddFirstLetters(Place.Names.First(), 15, builder);
+        Utilities.AddFirstLetters(Place.Names.First().Name, 15, builder);
       return builder.ToString();
     }
   }
