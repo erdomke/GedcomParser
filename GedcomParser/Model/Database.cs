@@ -1,9 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser.Model
 {
@@ -11,7 +15,7 @@ namespace GedcomParser.Model
   {
     private Dictionary<string, IHasId> _nodes = new Dictionary<string, IHasId>();
     private Lookup<string, FamilyLink> _relationships = new Lookup<string, FamilyLink>();
-    private Lookup<IHasId, IHasId> _whereUsed = new Lookup<IHasId, IHasId>();
+    private Lookup<IHasId, object> _whereUsed = new Lookup<IHasId, object>();
 
 
     public void Add(IHasId primaryObject)
@@ -24,6 +28,108 @@ namespace GedcomParser.Model
     {
       _relationships.Add(link.Individual, link);
       _relationships.Add(link.Family, link);
+    }
+
+    public void RemoveUnused()
+    {
+      var itemsToRemove = Places().Where(p => !WhereUsed(p).Any())
+        .OfType<IHasId>()
+        .Concat(Organizations().Where(p => !WhereUsed(p).Any()))
+        .Concat(Citations().Where(p => !WhereUsed(p).Any()))
+        .ToList();
+      foreach (var item in itemsToRemove)
+      {
+        foreach (var id in item.Id)
+          _nodes.Remove(id);
+      }
+    }
+
+    public async Task GeocodePlaces()
+    {
+      var client = new HttpClient();
+      client.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("erdomke-GedcomParser", "1.0.0"));
+      foreach (var place in Places()
+        .Where(p => !p.Attributes.TryGetValue("geocoded", out var geocoded) || geocoded != "true"))
+      {
+        Console.WriteLine("Geocoding: " + place.Names.First().Name);
+        var url = "https://nominatim.openstreetmap.org/search?format=geojson&addressdetails=1&extratags=1&q=" + Uri.EscapeDataString(place.Names.First().Name);
+        var jsonString = await client.GetStringAsync(url);
+        var yaml = new YamlStream();
+        using (var reader = new StringReader(jsonString))
+          yaml.Load(reader);
+        var firstMatch = yaml.Documents[0].RootNode.Item("features").EnumerateArray().FirstOrDefault();
+        place.Attributes["geocoded"] = "true";
+        if (firstMatch != null)
+        {
+          var placeName = new PlaceName()
+          {
+            Name = firstMatch.Item("properties").Item("display_name").String()
+          };
+          var address = firstMatch.Item("properties").Item("address") as YamlMappingNode;
+          if (address != null)
+          {
+            foreach (var part in address.Children)
+            {
+              switch (part.Key.String())
+              {
+                case "suburb":
+                case "country_code":
+                case "state_district":
+                case "boundary":
+                case "ISO3166-2-lvl4":
+                case "ISO3166-2-lvl5":
+                case "ISO3166-2-lvl6":
+                case "ISO3166-2-lvl15":
+                  break;
+                default:
+                  placeName.Parts.Add(new KeyValuePair<string, string>(part.Key.String(), part.Value.String()));
+                  break;
+              }
+            }
+          }
+          place.Names.Insert(0, placeName);
+          var wikidata = firstMatch.Item("properties").Item("extratags").Item("wikidata").String();
+          if (!string.IsNullOrEmpty(wikidata))
+            place.Links.Add(new Link()
+            {
+              Url = new Uri("https://www.wikidata.org/wiki/" + wikidata)
+            });
+          var wikipedia = (firstMatch.Item("properties").Item("extratags").Item("wikipedia").String() ?? "").Split(':');
+          if (wikipedia.Length == 2)
+            place.Links.Add(new Link()
+            {
+              Url = new Uri($"https://{wikipedia[0]}.wikipedia.org/wiki/{wikipedia[1].Replace(' ', '_')}")
+            });
+          var bbox = firstMatch.Item("bbox") as YamlSequenceNode;
+          if (bbox != null)
+            place.BoundingBox.AddRange(bbox.Children.Select(c => double.Parse(c.String())));
+          if (firstMatch.Item("geometry").Item("type").String() == "Point")
+          {
+            place.Longitude = double.Parse(firstMatch.Item("geometry").Item("coordinates").Item(0).String());
+            place.Latitude = double.Parse(firstMatch.Item("geometry").Item("coordinates").Item(1).String());
+          }
+        }
+      }
+
+      MarkDuplicates();
+    }
+
+    public void MarkDuplicates()
+    {
+      foreach (var group in Places().GroupBy(p =>
+      {
+        if (p.BoundingBox.Count > 0)
+          return string.Join(",", p.BoundingBox.Select(d => d.ToString()));
+        else if (p.Latitude.HasValue && p.Longitude.HasValue)
+          return $"{p.Longitude.Value},{p.Latitude.Value}";
+        else
+          return p.Names.FirstOrDefault()?.Name.Trim() ?? Guid.NewGuid().ToString("N");
+      }))
+      {
+        var ordered = group.OrderBy(p => p.Id.Primary).ToList();
+        foreach (var place in ordered.Skip(1))
+          place.DuplicateOf = ordered[0].Id.Primary;
+      }
     }
 
     public void MakeIdsHumanReadable()
@@ -49,11 +155,11 @@ namespace GedcomParser.Model
       }
     }
 
-    public IEnumerable<IHasId> WhereUsed(IHasId primaryObject)
+    public IEnumerable<object> WhereUsed(IHasId primaryObject)
     {
       if (_whereUsed.Count < 1)
       {
-        var toProcess = _nodes.Values.ToList();
+        var toProcess = _nodes.Values.OfType<object>().ToList();
         for (var i = 0; i < toProcess.Count; i++)
         {
           if (toProcess[i] is Individual individual)
@@ -67,6 +173,7 @@ namespace GedcomParser.Model
               .Select(l => _nodes.TryGetValue(l.Family, out var obj) ? obj : null)
               .Where(o => o != null))
               _whereUsed.Add(individual, family);
+            toProcess.AddRange(individual.Names);
           }
           else if (toProcess[i] is Family family)
           {
@@ -85,6 +192,23 @@ namespace GedcomParser.Model
             if (organization.Place != null)
               _whereUsed.Add(organization.Place, organization);
           }
+          else if (toProcess[i] is Citation citation)
+          {
+            if (citation.Publisher != null)
+              _whereUsed.Add(citation.Publisher, citation);
+            if (citation.Repository != null)
+              _whereUsed.Add(citation.Repository, citation);
+          }
+          else if (toProcess[i] is Place place)
+          {
+            toProcess.AddRange(place.Names);
+          }
+          else if (toProcess[i] is Media media)
+          {
+            if (media.Place != null)
+              _whereUsed.Add(media.Place, media);
+          }
+
 
           if (toProcess[i] is IHasCitations hasCitations)
           {

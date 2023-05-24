@@ -6,6 +6,7 @@ namespace GedcomParser.Model
 {
   internal class ResolvedFamily
   {
+    public Identifiers Id { get; }
     public List<Individual> Parents { get; }
     public List<Individual> Children { get; }
     public List<Event> Events { get; }
@@ -13,6 +14,7 @@ namespace GedcomParser.Model
 
     private ResolvedFamily(Family family, Database db)
     {
+      Id = family.Id;
       Parents = db.FamilyLinks(family, FamilyLinkType.Parent)
         .Select(l => db.GetValue<Individual>(l.Individual))
         .ToList();

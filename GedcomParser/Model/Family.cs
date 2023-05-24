@@ -8,6 +8,7 @@ namespace GedcomParser.Model
   public class Family : IPrimaryObject
   {
     public Identifiers Id { get; } = new Identifiers();
+    public string DuplicateOf { get; set; }
     public List<Event> Events { get; } = new List<Event>();
     public FamilyType Type { get; set; }
 

@@ -5,6 +5,7 @@ namespace GedcomParser.Model
 {
   public interface IHasId
   {
+    string DuplicateOf { get; }
     Identifiers Id { get; }
 
     void BuildEqualityString(StringBuilder builder, Database db);

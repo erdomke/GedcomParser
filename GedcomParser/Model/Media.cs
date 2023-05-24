@@ -9,6 +9,7 @@ namespace GedcomParser.Model
   public class Media : IHasId, IHasAttributes, IHasCitations, IHasNotes, IHasLinks
   {
     public Identifiers Id { get; } = new Identifiers();
+    public string DuplicateOf { get; set; }
 
     public ExtendedDateRange Date { get; set; }
     public Place Place { get; set; }

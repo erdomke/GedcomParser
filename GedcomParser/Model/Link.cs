@@ -6,6 +6,7 @@ namespace GedcomParser.Model
   public class Link : IHasId
   {
     public Identifiers Id { get; } = new Identifiers();
+    public string DuplicateOf { get; set; }
 
     public Uri Url { get; set; }
 

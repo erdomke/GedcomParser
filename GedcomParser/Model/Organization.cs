@@ -12,7 +12,8 @@ namespace GedcomParser.Model
 
     public string Name { get; set; }
     public Place Place { get; set; }
-    
+    public string DuplicateOf { get; set; }
+
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();
     public List<Link> Links { get; } = new List<Link>();

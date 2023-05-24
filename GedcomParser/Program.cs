@@ -1,8 +1,10 @@
 ﻿using GedcomParser.Model;
+using Markdig;
 using SixLabors.Fonts;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using YamlDotNet.RepresentationModel;
 
@@ -10,7 +12,7 @@ namespace GedcomParser
 {
   class Program
   {
-    static void Main__(string[] args)
+    static void Main(string[] args)
     {
       var db = new Database();
       var yaml = new YamlStream();
@@ -18,13 +20,32 @@ namespace GedcomParser
         yaml.Load(reader);
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
-      foreach (var place in db.Places())
-      {
 
-      }
+      var markdown = @"# Heading
+
+:::ged-report
+first: 1
+another: stuff
+:::";
+      var builder = new MarkdownPipelineBuilder();
+      builder.Extensions.Add(new FencedDivExtension(db));
+      var pipeline = builder.Build();
+      var html = Markdown.ToHtml(markdown, pipeline);
     }
 
-    static void Main(string[] args)
+    static async Task Main_Roundtrip(string[] args)
+    {
+      var db = new Database();
+      var yaml = new YamlStream();
+      using (var reader = new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"))
+        yaml.Load(reader);
+      var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
+      new YamlLoader().Load(db, mapping);
+      db.MakeIdsHumanReadable();
+      new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+    }
+
+    static void Main_Merge(string[] args)
     {
       var db = new Database();
       var yaml = new YamlStream();

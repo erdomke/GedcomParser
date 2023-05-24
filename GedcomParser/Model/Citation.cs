@@ -8,6 +8,7 @@ namespace GedcomParser.Model
   public class Citation : IHasId, IHasAttributes, IHasNotes, IEquatable<Citation>
   {
     public Identifiers Id { get; } = new Identifiers();
+    public string DuplicateOf { get; set; }
 
     public string Author { get; set; }
     public string Title { get; set; }

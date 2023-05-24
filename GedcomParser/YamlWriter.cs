@@ -32,7 +32,9 @@ namespace GedcomParser
     private YamlMappingNode BuildListingById<T>(IEnumerable<T> objects, Func<T, YamlMappingNode> visit, string rootName) where T : IHasId
     {
       var result = new YamlMappingNode();
-      foreach (var obj in objects.OrderBy(o => o.Id.Primary, StringComparer.OrdinalIgnoreCase))
+      foreach (var obj in objects
+        .OrderBy(o => o.DuplicateOf ?? o.Id.Primary, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(o => o.Id.Primary, StringComparer.OrdinalIgnoreCase))
       {
         result.Add(obj.Id.Primary, visit(obj));
       }
@@ -375,6 +377,12 @@ namespace GedcomParser
         }
         if (citations.Any())
           mappingNode.Add("citations", citations);
+      }
+
+      if (primaryObject is IHasId hasId
+        && !string.IsNullOrEmpty(hasId.DuplicateOf))
+      {
+        mappingNode.Add("$ref", $"#/places/" + hasId.DuplicateOf);
       }
     }
   }

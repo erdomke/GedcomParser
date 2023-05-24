@@ -10,6 +10,7 @@ namespace GedcomParser.Model
   public class Event : IPrimaryObject
   {
     public Identifiers Id { get; } = new Identifiers();
+    public string DuplicateOf { get; set; }
 
     public EventType Type { get; set; }
     public string TypeString { get; set; }

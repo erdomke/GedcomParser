@@ -12,10 +12,7 @@ namespace GedcomParser.Model
     public double? Latitude { get; set; }
     public double? Longitude { get; set; }
     public List<PlaceName> Names { get; } = new List<PlaceName>();
-    //public string Country { get; set; }
-    //public string Locality { get; set; }
-    //public string StreetAddress { get; set; }
-    //public string PostalCode { get; set; }
+    public string DuplicateOf { get; set; }
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>();
     public List<Citation> Citations { get; } = new List<Citation>();
@@ -43,7 +40,7 @@ namespace GedcomParser.Model
         var length = Math.Min(15, 30 - builder.Length);
         if (length <= 0)
           break;
-        Utilities.AddFirstLetters(part, length, builder, true);
+        Utilities.AddFirstLetters(part.Replace("Magisterial ", ""), length, builder, true);
       }
       return builder.ToString();
     }
