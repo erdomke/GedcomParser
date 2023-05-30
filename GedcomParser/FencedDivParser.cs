@@ -14,7 +14,9 @@ namespace GedcomParser
   internal class FencedDivExtension : IMarkdownExtension
   {
     private IEnumerable<ResolvedFamily> _families;
+
     public Database Database { get; }
+    public FamilyRenderer Renderer { get; set; }
 
     public FencedDivExtension(Database database)
     {
@@ -111,33 +113,33 @@ namespace GedcomParser
           }
           var code = builder.ToString();
 
+          var childProcessor = processor.CreateChild();
           fencedDiv.Clear();
-          var markdownBuilder = new StringBuilder();
-          foreach (var family in _extension.ResolvedFamilies())
+          fencedDiv.IsOpen = true;
+          childProcessor.Open(fencedDiv);
+
+          foreach (var family in _extension.ResolvedFamilies()
+            .OrderByDescending(f => f.StartDate))
           {
-            markdownBuilder.AppendLine();
+            childProcessor.ProcessLine(new StringSlice(""));
 
-            markdownBuilder.Append("## " + string.Join(" + ", family.Parents.Select(p => p.Name.Surname)));
-            markdownBuilder.AppendLine();
+            childProcessor.ProcessLine(new StringSlice("## " + string.Join(" + ", family.Parents.Select(p => p.Name.Surname))));
+            childProcessor.ProcessLine(new StringSlice(""));
 
-            var familyMembers = family.Parents.Concat(family.Children).ToList();
-            foreach (var familyEvent in family.Events.OrderBy(e => e.Date.Start))
+            if (_extension.Renderer != null)
             {
-              markdownBuilder.AppendLine();
-              var individual = _extension.Database.WhereUsed(familyEvent).OfType<Individual>().Intersect(familyMembers).FirstOrDefault();
-              if (individual == null)
-                markdownBuilder.Append($"- {familyEvent.Date:s}, {familyEvent.Type}, {familyEvent.Place}");
-              else
-                markdownBuilder.Append($"- {familyEvent.Date:s}, {familyEvent.Type} of {individual.Name}, {familyEvent.Place}");
+              childProcessor.ProcessLine(new StringSlice(_extension.Renderer.Render(new[] { family }).ToString()));
+              childProcessor.ProcessLine(new StringSlice(""));
+            }
+
+            foreach (var resolvedEvent in family.Events
+              .Where(e => e.Event.Date.HasValue)
+              .OrderBy(e => e.Event.Date))
+            {
+              childProcessor.ProcessLine(new StringSlice($"- {resolvedEvent.Event.Date:s}, {resolvedEvent.Description()}"));
             }
           }
 
-          var childProcessor = processor.CreateChild();
-          fencedDiv.IsOpen = true;
-          childProcessor.Open(fencedDiv);
-          var mdLines = markdownBuilder.ToString().Split(new string[] { "\r\n", "\r", "\n" }, System.StringSplitOptions.None);
-          foreach (var line in mdLines)
-            childProcessor.ProcessLine(new StringSlice(line));
           childProcessor.Close(fencedDiv);
         }
       }

@@ -1,6 +1,9 @@
 ﻿using GedcomParser.Model;
 using Markdig;
+using Microsoft.WindowsAPICodePack.Shell;
 using SixLabors.Fonts;
+using System;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -21,16 +24,33 @@ namespace GedcomParser
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
 
-      var markdown = @"# Heading
-
-:::ged-report
-first: 1
-another: stuff
-:::";
       var builder = new MarkdownPipelineBuilder();
-      builder.Extensions.Add(new FencedDivExtension(db));
+      builder.Extensions.Add(new FencedDivExtension(db)
+      {
+        Renderer = new FamilyRenderer()
+        {
+          Sizer = (fontName, height, text) =>
+          {
+            var font = SixLabors.Fonts.SystemFonts.CreateFont(fontName, (float)height);
+            return TextMeasurer.Measure(text, new TextOptions(font)).Width;
+          }
+        }
+      });
+
       var pipeline = builder.Build();
       var html = Markdown.ToHtml(markdown, pipeline);
+      File.WriteAllText(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html", html);
+
+      var renderer = new AncestorRenderer()
+      {
+        Sizer = (fontName, height, text) =>
+        {
+          var font = SixLabors.Fonts.SystemFonts.CreateFont(fontName, (float)height);
+          return TextMeasurer.Measure(text, new TextOptions(font)).Width;
+        }
+      };
+      var svg = renderer.Render(db, "DomkeEricMatthe19880316");
+      svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
     }
 
     static async Task Main_Roundtrip(string[] args)
@@ -92,58 +112,58 @@ another: stuff
       new YamlWriter().Write(db2, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
     }
 
-    static void RenderFamilyHtml(string[] args)
-    {
-      var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged");
-      //var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.ged");
+    //static void RenderFamilyHtml(string[] args)
+    //{
+    //  var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged");
+    //  //var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\Gramps_2022-12-28.ged");
       
-      var db = new Database();
-      new GedcomLoader().Load(db, structure);
+    //  var db = new Database();
+    //  new GedcomLoader().Load(db, structure);
 
-      using (var writer = new StreamWriter(@"C:\Users\erdomke\source\GitHub\GedcomParser\Test3.html"))
-      using (var html = new HtmlTextWriter(writer))
-      {
-        html.WriteStartElement("html");
-        html.WriteStartElement("body");
-        html.WriteStartElement("main");
-        foreach (var family in ResolvedFamily.Resolve(db.Families(), db)
-          .OrderByDescending(f => f.StartDate))
-        {
-          html.WriteStartElement("section");
-          html.WriteElementString("h2", family.StartDate.ToString("s") + ": " + string.Join(" + ", family.Parents.Select(p => p.Name.Surname)));
+    //  using (var writer = new StreamWriter(@"C:\Users\erdomke\source\GitHub\GedcomParser\Test3.html"))
+    //  using (var html = new HtmlTextWriter(writer))
+    //  {
+    //    html.WriteStartElement("html");
+    //    html.WriteStartElement("body");
+    //    html.WriteStartElement("main");
+    //    foreach (var family in ResolvedFamily.Resolve(db.Families(), db)
+    //      .OrderByDescending(f => f.StartDate))
+    //    {
+    //      html.WriteStartElement("section");
+    //      html.WriteElementString("h2", family.StartDate.ToString("s") + ": " + string.Join(" + ", family.Parents.Select(p => p.Name.Surname)));
           
-          html.WriteStartElement("ul");
-          foreach (var parent in family.Parents)
-          {
-            html.WriteElementString("li", parent.Name.Name);
-          }
-          html.WriteEndElement();
-          html.WriteStartElement("ul");
-          foreach (var child in family.Children)
-          {
-            html.WriteElementString("li", child.Name.Name);
-          }
-          html.WriteEndElement();
+    //      html.WriteStartElement("ul");
+    //      foreach (var parent in family.Parents)
+    //      {
+    //        html.WriteElementString("li", parent.Name.Name);
+    //      }
+    //      html.WriteEndElement();
+    //      html.WriteStartElement("ul");
+    //      foreach (var child in family.Children)
+    //      {
+    //        html.WriteElementString("li", child.Name.Name);
+    //      }
+    //      html.WriteEndElement();
 
-          html.WriteStartElement("ul");
-          var familyMembers = family.Parents.Concat(family.Children).ToList();
-          foreach (var familyEvent in family.Events.OrderBy(e => e.Date.Start))
-          {
-            var individual = db.WhereUsed(familyEvent).OfType<Individual>().Intersect(familyMembers).FirstOrDefault();
-            if (individual == null)
-              html.WriteElementString("li", $"{familyEvent.Date:s}, {familyEvent.Type}, {familyEvent.Place}");
-            else
-              html.WriteElementString("li", $"{familyEvent.Date:s}, {familyEvent.Type} of {individual.Name}, {familyEvent.Place}");
-          }
-          html.WriteEndElement();
+    //      html.WriteStartElement("ul");
+    //      var familyMembers = family.Parents.Concat(family.Children).ToList();
+    //      foreach (var familyEvent in family.Events.OrderBy(e => e.Date.Start))
+    //      {
+    //        var individual = db.WhereUsed(familyEvent).OfType<Individual>().Intersect(familyMembers).FirstOrDefault();
+    //        if (individual == null)
+    //          html.WriteElementString("li", $"{familyEvent.Date:s}, {familyEvent.Type}, {familyEvent.Place}");
+    //        else
+    //          html.WriteElementString("li", $"{familyEvent.Date:s}, {familyEvent.Type} of {individual.Name}, {familyEvent.Place}");
+    //      }
+    //      html.WriteEndElement();
 
-          html.WriteEndElement();
-        }
-        html.WriteEndElement();
-        html.WriteEndElement();
-        html.WriteEndElement();
-      }
-    }
+    //      html.WriteEndElement();
+    //    }
+    //    html.WriteEndElement();
+    //    html.WriteEndElement();
+    //    html.WriteEndElement();
+    //  }
+    //}
 
     static void RenderSvg(string[] args)
     {
@@ -154,7 +174,7 @@ another: stuff
       {
         Sizer = (fontName, height, text) =>
         {
-          var font = SystemFonts.CreateFont(fontName, (float)height);
+          var font = SixLabors.Fonts.SystemFonts.CreateFont(fontName, (float)height);
           return TextMeasurer.Measure(text, new TextOptions(font)).Width;
         }
       };

@@ -62,7 +62,9 @@ namespace GedcomParser
     {
       var node = new YamlMappingNode();
       var parents = new YamlSequenceNode();
-      foreach (var link in db.FamilyLinks(family, FamilyLinkType.Parent))
+      var allLinks = db.FamilyLinks(family, FamilyLinkType.Other);
+
+      foreach (var link in allLinks.Where(l => l.Type.HasFlag(FamilyLinkType.Parent)))
       {
         if (db.TryGetValue(link.Individual, out Individual individual))
           parents.Add(new YamlMappingNode()
@@ -77,7 +79,7 @@ namespace GedcomParser
         node.Add("type", family.Type.ToString());
 
       var children = new YamlSequenceNode();
-      foreach (var link in db.FamilyLinks(family, FamilyLinkType.Child))
+      foreach (var link in allLinks.Where(l => l.Type.HasFlag(FamilyLinkType.Birth)))
       {
         if (db.TryGetValue(link.Individual, out Individual individual))
           children.Add(new YamlMappingNode()
@@ -87,6 +89,24 @@ namespace GedcomParser
       }
       if (children.Any())
         node.Add("children", children);
+
+      var members = new YamlSequenceNode();
+      foreach (var link in allLinks.Where(l =>
+        !l.Type.HasFlag(FamilyLinkType.Parent)
+        && !l.Type.HasFlag(FamilyLinkType.Birth)))
+      {
+        if (db.TryGetValue(link.Individual, out Individual individual))
+          members.Add(new YamlMappingNode()
+          {
+            { "type", new YamlScalarNode(link.Type.ToString()) },
+            { "member", new YamlMappingNode()
+            {
+              { "$ref", "#/people/" + individual.Id.Primary }
+            } }
+          });
+      }
+      if (members.Any())
+        node.Add("members", members);
       if (family.Events.Count > 0)
         node.Add("events", new YamlSequenceNode(family.Events.Select(Visit)));
       AddCommonProperties(node, family);

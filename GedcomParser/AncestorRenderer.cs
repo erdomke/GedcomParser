@@ -173,22 +173,15 @@ namespace GedcomParser
             }
         }
 
-        private class Node
-        {
+        private class Node : Rectangle
+    {
             public string Id { get; set; }
             public int Column { get; set; }
             public FamilyLinkType Type { get; set; }
             public Node Child { get; set; }
-            public double Left { get; set; }
-            public double Right => Left + Width;
-            public double Bottom => Top + Height;
-            public double Top { get; set; }
             public List<Node> Parents { get; } = new List<Node>();
-            public double Width { get; set; }
-            public double Height { get; set; } = nodeHeight;
             public string Name { get; set; }
             public string Dates { get; set; }
-            public double MidY => Top + Height / 2;
             public Node Above { get; set; }
             public Node Below { get; set; }
 
@@ -196,7 +189,7 @@ namespace GedcomParser
             {
                 var individual = database.GetValue<Individual>(Id);
                 Name = individual.Name.Name;
-                Dates = $"{individual.BirthDate.ToString("s")} - {individual.DeathDate.ToString("s")}";
+                Dates = $"{individual.BirthDate:s} - {individual.DeathDate:s}";
                 if (individual.BirthDate.TryGetDiff(individual.DeathDate, out var minAge, out var maxAge))
                 {
                     var age = (minAge.Years + maxAge.Years) / 2;

@@ -3,7 +3,7 @@ using System.Globalization;
 
 namespace GedcomParser
 {
-  public struct ExtendedDateRange : IFormattable
+  public struct ExtendedDateRange : IFormattable, IComparable<ExtendedDateRange>
   {
     public bool HasValue => Type != DateRangeType.Unknown;
     public DateRangeType Type { get; private set; }
@@ -291,6 +291,32 @@ namespace GedcomParser
       return Type.GetHashCode()
           ^ Start.GetHashCode()
           ^ End.GetHashCode();
+    }
+
+    public int CompareTo(ExtendedDateRange other)
+    {
+      if (this.Equals(other))
+        return 0;
+      var thisDate = this.Start.HasValue ? this.Start : this.End;
+      var otherDate = other.Start.HasValue ? other.Start : other.End;
+
+      var result = thisDate.CompareTo(otherDate);
+      if (result == 0)
+        return this.OpenEndedOffset().CompareTo(other.OpenEndedOffset());
+      return result;
+    }
+
+    private int OpenEndedOffset()
+    {
+      if (this.Type == DateRangeType.Period
+        || this.Type == DateRangeType.Range)
+      {
+        if (!this.End.HasValue)
+          return 1;
+        if (!this.Start.HasValue)
+          return -1;
+      }
+      return 0;
     }
   }
 }

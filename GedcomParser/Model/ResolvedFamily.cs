@@ -7,31 +7,42 @@ namespace GedcomParser.Model
   internal class ResolvedFamily
   {
     public Identifiers Id { get; }
-    public List<Individual> Parents { get; }
-    public List<Individual> Children { get; }
-    public List<Event> Events { get; }
+    public IEnumerable<Individual> Parents => Members
+      .Where(m => m.Role.HasFlag(FamilyLinkType.Parent))
+      .Select(m => m.Individual);
+
+    public List<FamilyMember> Members { get; }
+    public List<ResolvedEvent> Events { get; }
     public ExtendedDateTime StartDate { get; }
 
     private ResolvedFamily(Family family, Database db)
     {
       Id = family.Id;
-      Parents = db.FamilyLinks(family, FamilyLinkType.Parent)
-        .Select(l => db.GetValue<Individual>(l.Individual))
-        .ToList();
-      Children = db.FamilyLinks(family, FamilyLinkType.Child)
-        .Select(l => db.GetValue<Individual>(l.Individual))
+      Members = db.FamilyLinks(family, FamilyLinkType.Other)
+        .Select(l => new FamilyMember(db.GetValue<Individual>(l.Individual), l.Type))
         .ToList();
       
-      Events = family.Events.ToList();
+      Events = family.Events
+        .Select(e => {
+          var ev = new ResolvedEvent(e);
+          ev.Primary.AddRange(Parents);
+          ev.PrimaryRole = FamilyLinkType.Parent;
+          return ev;
+        })
+        .ToList();
       var familyDates = Events
-        .Concat(Children.SelectMany(c => c.Events))
+        .Select(e => e.Event)
+        .Concat(Members
+          .Where(m => m.Role.HasFlag(FamilyLinkType.Child))
+          .SelectMany(m => m.Individual.Events))
         .Select(e => e.Date.Start)
         .Where(d => d.HasValue)
         .ToList();
       if (familyDates.Count < 1)
       {
-        familyDates.AddRange(Parents
-          .SelectMany(p => p.Events.Where(e => e.Type == EventType.Birth))
+        familyDates.AddRange(Members
+          .Where(m => m.Role.HasFlag(FamilyLinkType.Parent))
+          .SelectMany(m => m.Individual.Events.Where(e => e.Type == EventType.Birth))
           .Where(e => e.Date.HasValue)
           .Select(e => e.Date.Start.AddYears(16)));
         StartDate = familyDates.Max();
@@ -47,29 +58,35 @@ namespace GedcomParser.Model
       var result = families
         .Select(f => new ResolvedFamily(f, db))
         .ToList();
-      var individualLookup = result.SelectMany(f => f.Parents
-        .Concat(f.Children)
+      var individualLookup = result.SelectMany(f => f.Members
         .Select(i => ValueTuple.Create(i, f)))
-        .ToLookup(t => t.Item1, t => t.Item2);
+        .ToLookup(t => t.Item1.Individual, t => ValueTuple.Create(t.Item1.Role, t.Item2));
       foreach (var familyList in individualLookup)
       {
-        var individualFamilies = familyList.OrderBy(f => f.StartDate).ToList();
+        var individualFamilies = familyList.OrderBy(f => f.Item2.StartDate).ToList();
         var ranges = new List<ExtendedDateRange>();
         for (var i = 0; i < individualFamilies.Count; i++)
         {
-          var start = individualFamilies[i].StartDate;
+          var start = individualFamilies[i].Item2.StartDate;
           if (i == 0)
             start = default(ExtendedDateTime);
           var end = default(ExtendedDateTime);
           if (i + 1 < individualFamilies.Count)
-            end = individualFamilies[i + 1].StartDate;
+            end = individualFamilies[i + 1].Item2.StartDate;
           ranges.Add(new ExtendedDateRange(start, end));
         }
         foreach (var individualEvent in familyList.Key.Events)
         {
           var idx = ranges.FindIndex(r => r.InRange(individualEvent.Date));
           if (idx >= 0)
-            individualFamilies[idx].Events.Add(individualEvent);
+          {
+            var resolved = new ResolvedEvent(individualEvent);
+            resolved.Primary.Add(familyList.Key);
+            resolved.PrimaryRole = individualFamilies[idx].Item1;
+            if (individualFamilies[idx].Item1.HasFlag(FamilyLinkType.Child))
+              resolved.Secondary.AddRange(individualFamilies[idx].Item2.Parents);
+            individualFamilies[idx].Item2.Events.Add(resolved);
+          }
         }
       }
       return result;

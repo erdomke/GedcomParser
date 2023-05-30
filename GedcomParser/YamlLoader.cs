@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
@@ -125,6 +126,22 @@ namespace GedcomParser
                 Family = family.Id.Primary,
                 Individual = child.Id.Primary,
                 Type = FamilyLinkType.Birth
+              });
+            }
+            break;
+          case "members":
+            foreach (var link in ((YamlSequenceNode)property.Value).Children
+              .OfType<YamlMappingNode>()
+              .Select(c => ValueTuple.Create(
+                Enum.Parse<FamilyLinkType>((string)c["type"], true),
+                Create(null, (YamlMappingNode)c["member"], database, Individual)
+              )))
+            {
+              database.Add(new FamilyLink()
+              {
+                Family = family.Id.Primary,
+                Individual = link.Item2.Id.Primary,
+                Type = link.Item1
               });
             }
             break;
