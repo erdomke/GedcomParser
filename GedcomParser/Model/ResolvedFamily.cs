@@ -7,6 +7,7 @@ namespace GedcomParser.Model
   internal class ResolvedFamily
   {
     public Identifiers Id { get; }
+
     public IEnumerable<Individual> Parents => Members
       .Where(m => m.Role.HasFlag(FamilyLinkType.Parent))
       .Select(m => m.Individual);
@@ -52,6 +53,14 @@ namespace GedcomParser.Model
         StartDate = familyDates.Min();
       }
     }
+
+    public IEnumerable<Individual> Children(FamilyLinkType childType = FamilyLinkType.Child)
+    {
+      return Members
+        .Where(m => m.Role.HasFlag(childType))
+        .Select(m => m.Individual);
+    } 
+
 
     public static IEnumerable<ResolvedFamily> Resolve(IEnumerable<Family> families, Database db)
     {

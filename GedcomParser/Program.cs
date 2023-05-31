@@ -24,7 +24,8 @@ namespace GedcomParser
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
 
-      var builder = new MarkdownPipelineBuilder();
+      var builder = new MarkdownPipelineBuilder()
+        .UseGenericAttributes();
       builder.Extensions.Add(new FencedDivExtension(db)
       {
         Renderer = new FamilyRenderer()
@@ -53,7 +54,7 @@ namespace GedcomParser
       svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
     }
 
-    static async Task Main_Roundtrip(string[] args)
+    static async Task RoundTrip(string[] args)
     {
       var db = new Database();
       var yaml = new YamlStream();

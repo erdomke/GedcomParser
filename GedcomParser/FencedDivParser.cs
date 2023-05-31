@@ -4,8 +4,11 @@ using Markdig.Helpers;
 using Markdig.Parsers;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
+using Markdig.Renderers.Roundtrip;
 using Markdig.Syntax;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 
@@ -98,41 +101,37 @@ namespace GedcomParser
         ParseInfoToAttributes(fencedDiv);
         if (fencedDiv.ClassNames.Contains("ged-report"))
         {
-          var leafBlock = fencedDiv.FirstOrDefault() as LeafBlock;
           var builder = new StringBuilder();
-          if (leafBlock.Lines.Lines != null)
-          {
-            var lines = leafBlock.Lines;
-            var slices = lines.Lines;
-            for (int i = 0; i < lines.Count; i++)
-            {
-              if (i > 0)
-                builder.AppendLine();
-              builder.Append(slices[i].Slice.AsSpan());
-            }
-          }
-          var code = builder.ToString();
+          BuildLines(fencedDiv, builder);
+          var options = ReportOptions.Parse(builder.ToString());
 
           var childProcessor = processor.CreateChild();
-          fencedDiv.Clear();
-          fencedDiv.IsOpen = true;
-          childProcessor.Open(fencedDiv);
+          childProcessor.Open(fencedDiv.Parent);
 
-          foreach (var family in _extension.ResolvedFamilies()
-            .OrderByDescending(f => f.StartDate))
+          var groups = FamilyGroup.Create(_extension.ResolvedFamilies(), options);
+          foreach (var group in groups)
           {
             childProcessor.ProcessLine(new StringSlice(""));
-
-            childProcessor.ProcessLine(new StringSlice("## " + string.Join(" + ", family.Parents.Select(p => p.Name.Surname))));
+            var title = "## " + group.Title;
+            if (group.Families.Count == 1)
+              title += $" {{#{group.Families[0].Id.Primary}}}";
+            childProcessor.ProcessLine(new StringSlice(title));
             childProcessor.ProcessLine(new StringSlice(""));
 
-            if (_extension.Renderer != null)
+            if (group.Families.Count > 1)
             {
-              childProcessor.ProcessLine(new StringSlice(_extension.Renderer.Render(new[] { family }).ToString()));
+              foreach (var family in group.Families)
+                childProcessor.ProcessLine(new StringSlice($"<a id='{family.Id.Primary}'>"));
               childProcessor.ProcessLine(new StringSlice(""));
             }
 
-            foreach (var resolvedEvent in family.Events
+            if (_extension.Renderer != null)
+            {
+              childProcessor.ProcessLine(new StringSlice(_extension.Renderer.Render(group.Families).ToString()));
+              childProcessor.ProcessLine(new StringSlice(""));
+            }
+
+            foreach (var resolvedEvent in group.Families.SelectMany(f => f.Events)
               .Where(e => e.Event.Date.HasValue)
               .OrderBy(e => e.Event.Date))
             {
@@ -144,6 +143,82 @@ namespace GedcomParser
         }
       }
       return base.Close(processor, block);
+    }
+
+    private void BuildLines(Block block, StringBuilder builder)
+    {
+      if (block is LeafBlock leafBlock)
+      {
+        if (leafBlock.Lines.Lines != null)
+        {
+          var lines = leafBlock.Lines;
+          var slices = lines.Lines;
+          for (int i = 0; i < lines.Count; i++)
+          {
+            if (i > 0)
+              builder.AppendLine();
+            builder.Append(slices[i].Slice.AsSpan());
+          }
+        }
+      }
+      else if (block is ContainerBlock container)
+      {
+        foreach (var child in container)
+          BuildLines(child, builder);
+      }
+      else
+      {
+        throw new NotSupportedException();
+      }
+    }
+
+    private class FamilyGroup
+    {
+      public string Title { get; set; }
+      public List<ResolvedFamily> Families { get; } = new List<ResolvedFamily>();
+
+      public static IEnumerable<FamilyGroup> Create(IEnumerable<ResolvedFamily> resolvedFamilies, ReportOptions options)
+      {
+        var xref = new Dictionary<string, ResolvedFamily>();
+        foreach (var family in resolvedFamilies)
+        {
+          foreach (var id in family.Id)
+            xref.Add(id, family);
+        }
+
+        var result = options.Groups
+          .Select(g =>
+          {
+            var resolved = new FamilyGroup()
+            {
+              Title = g.Title
+            };
+            resolved.Families.AddRange(g.Ids
+              .Select(i => xref.TryGetValue(i, out var f) ? f : null)
+              .Where(f => f != null)
+              .Distinct()
+              .OrderBy(f => f.StartDate));
+            if (string.IsNullOrEmpty(resolved.Title))
+              resolved.Title = string.Join(" + ", resolved.Families.SelectMany(f => f.Parents).Select(p => p.Name.Surname).Distinct());
+            return resolved;
+          })
+          .ToList();
+
+        foreach (var id in result.SelectMany(g => g.Families).SelectMany(f => f.Id))
+          xref.Remove(id);
+
+        foreach (var family in xref.Values)
+        {
+          var resolved = new FamilyGroup()
+          {
+            Title = string.Join(" + ", family.Parents.Select(p => p.Name.Surname))
+          };
+          resolved.Families.Add(family);
+          result.Add(resolved);
+        }
+
+        return result.OrderByDescending(g => g.Families.First().StartDate).ToList();
+      }
     }
 
     private void ParseInfoToAttributes(FencedDiv fencedDiv)
@@ -226,7 +301,7 @@ namespace GedcomParser
     }
   }
 
-  internal class FencedDiv : ContainerBlock, IFencedBlock
+  internal class FencedDiv : LeafBlock, IFencedBlock
   {
     public FencedDiv(BlockParser parser) : base(parser)
     {

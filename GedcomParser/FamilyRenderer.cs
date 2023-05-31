@@ -2,74 +2,120 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Media;
 using System.Xml.Linq;
 using static GedcomParser.AncestorRenderer;
 
 namespace GedcomParser
 {
+  class DiagramOptions
+  {
+    public int NodeHeight { get; set; } = 36;
+    public int NodeWidth { get; set; } = 300;
+    public int HorizontalSpacing { get; set; } = 20;
+    public int VerticalSpacing { get; set; } = 10;
+    public string FontName { get; set; } = "Verdana";
+  }
+
   internal class FamilyRenderer
   {
     private static XNamespace svgNs = (XNamespace)"http://www.w3.org/2000/svg";
-    private const int nodeHeight = 36;
-    private const int nodeWidth = 300;
-    private const int spacing = 10;
-    private const int horizPadding = 2;
-    private const string fontName = "Verdana";
+    private DiagramOptions _options = new DiagramOptions();
 
     public GetTextWidth Sizer { get; set; }
 
     public FamilyRenderer()
     {
-      Sizer = (f, p, t) => nodeWidth;
+      Sizer = (f, p, t) => _options.NodeWidth;
     }
 
     public XElement Render(IEnumerable<ResolvedFamily> families)
     {
       var result = new XElement(svgNs + "svg");
 
-      var allNodes = new List<Node>();
+      var nodesById = new Dictionary<string, Node>();
+      var previousFamilies = new List<ResolvedFamily>();
       foreach (var family in families)
       {
         var familyNodes = new List<Node>();
-        var previousLeft = -1.0 * spacing;
-        foreach (var node in family.Parents.Select(p => new Node().UpdateText(p, Sizer)))
+        var previousParent = family.Parents
+          .Select(p => nodesById.TryGetValue(p.Id.Primary, out var node) ? node : null)
+          .FirstOrDefault(n => n != null);
+        var startAfter = default(Node);
+        if (previousParent != null)
         {
-          node.Top = 0;
-          node.Left = previousLeft + spacing;
-          previousLeft = node.Right;
+          familyNodes.Add(previousParent);
+          startAfter = AllChildren(previousFamilies, family.Parents)
+            .Select(p => nodesById.TryGetValue(p.Id.Primary, out var node) ? node : null)
+            .Where(n => n != null)
+            .OrderByDescending(n => n.Bottom)
+            .FirstOrDefault();
+        }
+        foreach (var parent in family.Parents.Where(p => !nodesById.ContainsKey(p.Id.Primary)))
+        {
+          var node = new Node().UpdateText(parent, Sizer, _options);
+          nodesById[parent.Id.Primary] = node;
+          if (previousParent == null)
+          {
+            node.Top = 0;
+            node.Left = 0;
+          }
+          else
+          {
+            if (startAfter == null)
+              node.SetTopDependency(previousParent, (source, target) => source.Top);
+            else
+              startAfter.InsertAfter(node, (source, target) => source.Bottom + _options.VerticalSpacing);
+            node.SetLeftDependency(previousParent, (source, target) => source.Right + _options.HorizontalSpacing);
+          }
+          previousParent = node;
           familyNodes.Add(node);
         }
 
-        var childLeft = (familyNodes.Max(n => n.Right) + familyNodes.Min(n => n.Left)) * .25;
-        var bottom = familyNodes.Max(n => n.Bottom);
-        foreach (var node in family.Members.Where(m => m.Role.HasFlag(FamilyLinkType.Birth))
-          .Select(m => new Node().UpdateText(m.Individual, Sizer)))
+        var previousRow = familyNodes
+          .First(n => n.Top == familyNodes.Last().Top);
+        foreach (var child in family.Children(FamilyLinkType.Birth))
         {
-          node.Top = bottom + spacing;
-          node.Left = childLeft;
-          bottom = node.Bottom;
-          familyNodes.Add(node);
+          var node = new Node().UpdateText(child, Sizer, _options);
+          nodesById[child.Id.Primary] = node;
+          node.SetLeftDependency(familyNodes.First(), (source, target) => source.Left + _options.HorizontalSpacing);
+          previousRow.InsertAfter(node, (source, target) => source.Bottom + _options.VerticalSpacing);
+          previousRow = node;
         }
-        allNodes.AddRange(familyNodes);
+        previousFamilies.Add(family);
       }
 
-      foreach (var node in allNodes.SelectMany(n => n.ToSvg()))
+      foreach (var node in nodesById.Values.SelectMany(n => n.ToSvg()))
         result.Add(node);
 
-      var height = allNodes.Max(n => n.Bottom);
-      var width = allNodes.Max(n => n.Right);
+      var height = nodesById.Values.Max(n => n.Bottom);
+      var width = nodesById.Values.Max(n => n.Right);
       result.SetAttributeValue("viewBox", $"0 0 {width} {height}");
       result.SetAttributeValue("style", $"width:{width}px;height:{height};");
       return result;
     }
 
+    private IEnumerable<Individual> AllChildren(IEnumerable<ResolvedFamily> families, IEnumerable<Individual> parents)
+    {
+      var result = families
+        .Where(f => f.Parents.Intersect(parents).Any())
+        .SelectMany(f => f.Children())
+        .ToList();
+      foreach (var person in result.ToList())
+        result.AddRange(AllChildren(families, new[] { person }));
+      return result;
+    }
+
     private class Node : Rectangle
     {
+      private DiagramOptions _options;
+
       public string Name { get; private set; }
       public string Dates { get; private set; }
 
-      public Node UpdateText(Individual individual, GetTextWidth sizer)
+      public Node UpdateText(Individual individual, GetTextWidth sizer, DiagramOptions options)
       {
+        _options = options;
         Name = individual.Name.Name;
         Dates = $"{individual.BirthDate:s} - {individual.DeathDate:s}";
         if (individual.BirthDate.TryGetDiff(individual.DeathDate, out var minAge, out var maxAge))
@@ -77,7 +123,7 @@ namespace GedcomParser
           var age = (minAge.Years + maxAge.Years) / 2;
           Dates = age.ToString() + "y, " + Dates;
         }
-        Width = Math.Max(sizer(fontName, 16, Name), sizer(fontName, 12, Dates));
+        Width = Math.Max(sizer(options.FontName, 16, Name), sizer(options.FontName, 12, Dates));
         return this;
       }
 
@@ -88,12 +134,12 @@ namespace GedcomParser
             , new XElement(svgNs + "text"
                 , new XAttribute("x", 0)
                 , new XAttribute("y", 18)
-                , new XAttribute("style", "font-size:16px;font-family:" + fontName)
+                , new XAttribute("style", "font-size:16px;font-family:" + _options.FontName)
                 , Name)
             , new XElement(svgNs + "text"
                 , new XAttribute("x", 0)
                 , new XAttribute("y", Height - 4)
-                , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + fontName)
+                , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + _options.FontName)
                 , Dates)
         );
       }
