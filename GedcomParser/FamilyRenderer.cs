@@ -12,7 +12,7 @@ namespace GedcomParser
   {
     public int NodeHeight { get; set; } = 36;
     public int NodeWidth { get; set; } = 300;
-    public int HorizontalSpacing { get; set; } = 20;
+    public int HorizontalSpacing { get; set; } = 30;
     public int VerticalSpacing { get; set; } = 10;
     public string FontName { get; set; } = "Verdana";
   }
@@ -34,6 +34,7 @@ namespace GedcomParser
       var result = new XElement(svgNs + "svg");
 
       var nodesById = new Dictionary<string, Node>();
+      var connectors = new List<Connector>();
       var previousFamilies = new List<ResolvedFamily>();
       foreach (var family in families)
       {
@@ -51,7 +52,9 @@ namespace GedcomParser
             .OrderByDescending(n => n.Bottom)
             .FirstOrDefault();
         }
-        foreach (var parent in family.Parents.Where(p => !nodesById.ContainsKey(p.Id.Primary)))
+        foreach (var parent in family.Parents
+          .Where(p => !nodesById.ContainsKey(p.Id.Primary))
+          .OrderByDescending(p => families.Count(f => f.Parents.Contains(p))))
         {
           var node = new Node().UpdateText(parent, Sizer, _options);
           nodesById[parent.Id.Primary] = node;
@@ -63,9 +66,28 @@ namespace GedcomParser
           else
           {
             if (startAfter == null)
+            {
               node.SetTopDependency(previousParent, (source, target) => source.Top);
+              connectors.Add(new Connector()
+              {
+                Source = previousParent,
+                SourceHandle = Handle.MiddleRight,
+                Destination = node,
+                DestinationHandle = Handle.MiddleLeft
+              });
+            }
             else
+            {
               startAfter.InsertAfter(node, (source, target) => source.Bottom + _options.VerticalSpacing);
+              connectors.Add(new Connector()
+              {
+                Source = previousParent,
+                SourceHandle = Handle.BottomLeft,
+                SourceHorizontalOffset = _options.HorizontalSpacing / 3,
+                Destination = node,
+                DestinationHandle = Handle.MiddleLeft
+              });
+            }
             node.SetLeftDependency(previousParent, (source, target) => source.Right + _options.HorizontalSpacing);
           }
           previousParent = node;
@@ -85,6 +107,8 @@ namespace GedcomParser
         previousFamilies.Add(family);
       }
 
+      foreach (var connector in connectors.SelectMany(n => n.ToSvg()))
+        result.Add(connector);
       foreach (var node in nodesById.Values.SelectMany(n => n.ToSvg()))
         result.Add(node);
 

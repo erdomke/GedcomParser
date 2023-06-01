@@ -1,9 +1,58 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml.Linq;
 
 namespace GedcomParser
 {
+  internal class Connector
+  {
+    public Rectangle Source { get; set; }
+    public Handle SourceHandle { get; set; }
+    public Rectangle Destination { get; set; }
+    public Handle DestinationHandle { get; set; }
+    public double SourceHorizontalOffset { get; set; }
+
+    public IEnumerable<XElement> ToSvg()
+    {
+      var lineStyle = "stroke:black;stroke-width:1px;fill:none";
+      var start = Source.Handle(SourceHandle, SourceHorizontalOffset);
+      var end = Destination.Handle(DestinationHandle);
+      if (start.Y == end.Y)
+        yield return new XElement(Svg.Ns + "path"
+          , new XAttribute("style", lineStyle)
+          , new XAttribute("d", $"M {start.X} {start.Y} L {end.X} {end.Y}"));
+      else
+        yield return new XElement(Svg.Ns + "path"
+          , new XAttribute("style", lineStyle)
+          , new XAttribute("d", $"M {start.X} {start.Y} L {start.X} {end.Y} L {end.X} {end.Y}"));
+    }
+  }
+
+  public enum Handle
+  {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    MiddleLeft,
+    MiddleRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight,
+  }
+
+  internal struct Point
+  {
+    public double X { get; }
+    public double Y { get; }
+
+    public Point(double x, double y)
+    {
+      X = x;
+      Y = y;
+    }
+  }
+
   internal class Rectangle
   {
     private double _left;
@@ -37,7 +86,32 @@ namespace GedcomParser
     }
     public double Width { get; set; } = nodeWidth;
     public double Height { get; set; } = nodeHeight;
+    public double MidX => Left + Width / 2;
     public double MidY => Top + Height / 2;
+
+    public Point Handle(Handle handle, double xOffset = 0, double yOffset = 0)
+    {
+      switch (handle)
+      {
+        case GedcomParser.Handle.TopLeft:
+          return new Point(Left + xOffset, Top + yOffset);
+        case GedcomParser.Handle.TopCenter:
+          return new Point(MidX + xOffset, Top + yOffset);
+        case GedcomParser.Handle.TopRight:
+          return new Point(Right + xOffset, Top + yOffset);
+        case GedcomParser.Handle.MiddleLeft:
+          return new Point(Left + xOffset, MidY + yOffset);
+        case GedcomParser.Handle.MiddleRight:
+          return new Point(Right + xOffset, MidY + yOffset);
+        case GedcomParser.Handle.BottomLeft:
+          return new Point(Left + xOffset, Bottom + yOffset);
+        case GedcomParser.Handle.BottomCenter:
+          return new Point(MidX + xOffset, Bottom + yOffset);
+        //case GedcomParser.Handle.BottomRight:
+        default:
+          return new Point(Right + xOffset, Bottom + yOffset);
+      }
+    }
 
     public void InsertAfter(Rectangle value, Func<Rectangle, Rectangle, double> newValue)
     {

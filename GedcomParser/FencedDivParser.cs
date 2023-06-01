@@ -121,7 +121,7 @@ namespace GedcomParser
             if (group.Families.Count > 1)
             {
               foreach (var family in group.Families)
-                childProcessor.ProcessLine(new StringSlice($"<a id='{family.Id.Primary}'>"));
+                childProcessor.ProcessLine(new StringSlice($"<a id='{family.Id.Primary}'></a>"));
               childProcessor.ProcessLine(new StringSlice(""));
             }
 
