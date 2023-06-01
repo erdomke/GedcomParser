@@ -25,6 +25,27 @@ namespace GedcomParser.Model
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
 
+    public string DateString
+    {
+      get
+      {
+        var result = BirthDate.ToString("s") + " - ";
+        var deathEvent = Events.FirstOrDefault(e => e.Type == EventType.Death);
+        if (deathEvent == null)
+        {
+          result += "?";
+        }
+        else
+        {
+          if (deathEvent.Date.HasValue)
+            result += deathEvent.Date.ToString("s");
+          else
+            result += "Deceased";
+        }
+        return result;
+      }
+    }
+
     public void BuildEqualityString(StringBuilder builder, Database db)
     {
       builder.Append(Sex.ToString());

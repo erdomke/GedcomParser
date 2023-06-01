@@ -19,7 +19,6 @@ namespace GedcomParser
 
   internal class FamilyRenderer
   {
-    private static XNamespace svgNs = (XNamespace)"http://www.w3.org/2000/svg";
     private DiagramOptions _options = new DiagramOptions();
 
     public GetTextWidth Sizer { get; set; }
@@ -31,44 +30,65 @@ namespace GedcomParser
 
     public XElement Render(IEnumerable<ResolvedFamily> families)
     {
-      var result = new XElement(svgNs + "svg");
+      var result = new XElement(Svg.Ns + "svg");
 
       var nodesById = new Dictionary<string, Node>();
-      var connectors = new List<Connector>();
+      var graphics = new List<ISvgGraphic>();
       var previousFamilies = new List<ResolvedFamily>();
-      foreach (var family in families)
+      var familyList = families.ToList();
+      foreach (var family in familyList)
       {
-        var familyNodes = new List<Node>();
-        var previousParent = family.Parents
+        var familyNodes = family.Parents
           .Select(p => nodesById.TryGetValue(p.Id.Primary, out var node) ? node : null)
-          .FirstOrDefault(n => n != null);
+          .Where(n => n != null)
+          .OrderBy(n => n.Left)
+          .ToList();
+        var previousParent = familyNodes.FirstOrDefault();
         var startAfter = default(Node);
         if (previousParent != null)
         {
-          familyNodes.Add(previousParent);
           startAfter = AllChildren(previousFamilies, family.Parents)
             .Select(p => nodesById.TryGetValue(p.Id.Primary, out var node) ? node : null)
             .Where(n => n != null)
             .OrderByDescending(n => n.Bottom)
             .FirstOrDefault();
         }
+        var parentAnchor = (Shape)previousParent;
+        for (var i = 1; i < familyNodes.Count; i++)
+        {
+          graphics.Add(new Connector()
+          {
+            Source = familyNodes[i - 1],
+            SourceHandle = Handle.MiddleRight,
+            Destination = familyNodes[i],
+            DestinationHandle = Handle.MiddleLeft
+          });
+        }
+
         foreach (var parent in family.Parents
           .Where(p => !nodesById.ContainsKey(p.Id.Primary))
-          .OrderByDescending(p => families.Count(f => f.Parents.Contains(p))))
+          .OrderByDescending(p => familyList.Count(f => f.Parents.Contains(p))))
         {
           var node = new Node().UpdateText(parent, Sizer, _options);
-          nodesById[parent.Id.Primary] = node;
           if (previousParent == null)
           {
+            var lastFirstRow = nodesById.Values
+              .Where(n => n.Top == 0)
+              .OrderByDescending(n => n.Right)
+              .FirstOrDefault();
             node.Top = 0;
-            node.Left = 0;
+            if (lastFirstRow == null)
+              node.Left = 0;
+            else
+              node.SetLeftDependency(lastFirstRow, (source, target) => source.Right + _options.HorizontalSpacing);
+            parentAnchor = node;
           }
           else
           {
             if (startAfter == null)
             {
               node.SetTopDependency(previousParent, (source, target) => source.Top);
-              connectors.Add(new Connector()
+              graphics.Add(new Connector()
               {
                 Source = previousParent,
                 SourceHandle = Handle.MiddleRight,
@@ -78,8 +98,8 @@ namespace GedcomParser
             }
             else
             {
-              startAfter.InsertAfter(node, (source, target) => source.Bottom + _options.VerticalSpacing);
-              connectors.Add(new Connector()
+              node.InsertAfter(new[] { startAfter }, (source, target) => source.Bottom + _options.VerticalSpacing);
+              graphics.Add(new Connector()
               {
                 Source = previousParent,
                 SourceHandle = Handle.BottomLeft,
@@ -87,27 +107,45 @@ namespace GedcomParser
                 Destination = node,
                 DestinationHandle = Handle.MiddleLeft
               });
+              parentAnchor = new Dot();
+              parentAnchor.SetLeftDependency(previousParent, (source, target) => source.Left + _options.HorizontalSpacing * 2 / 3);
+              parentAnchor.SetTopDependency(node, (source, target) => source.MidY - target.Height / 2);
+              graphics.Add(parentAnchor);
             }
             node.SetLeftDependency(previousParent, (source, target) => source.Right + _options.HorizontalSpacing);
           }
+
+          nodesById[parent.Id.Primary] = node;
           previousParent = node;
           familyNodes.Add(node);
         }
 
-        var previousRow = familyNodes
-          .First(n => n.Top == familyNodes.Last().Top);
-        foreach (var child in family.Children(FamilyLinkType.Birth))
+        var previousRow = (IEnumerable<Shape>)familyNodes
+          .Where(n => n.Top == familyNodes.Last().Top)
+          .ToList();
+        foreach (var child in family.Children(FamilyLinkType.Birth)
+          .OrderBy(i => familyList.FindIndex(f => f.Parents.Contains(i)))
+          .ThenBy(i => i.BirthDate))
         {
           var node = new Node().UpdateText(child, Sizer, _options);
           nodesById[child.Id.Primary] = node;
           node.SetLeftDependency(familyNodes.First(), (source, target) => source.Left + _options.HorizontalSpacing);
-          previousRow.InsertAfter(node, (source, target) => source.Bottom + _options.VerticalSpacing);
-          previousRow = node;
+          node.InsertAfter(previousRow, (source, target) => source.Bottom + _options.VerticalSpacing);
+          previousRow = new[] { node };
+
+          graphics.Add(new Connector()
+          {
+            Source = parentAnchor,
+            SourceHandle = parentAnchor is Dot ? Handle.MiddleCenter : Handle.BottomLeft,
+            SourceHorizontalOffset = parentAnchor is Dot ? 0 : _options.HorizontalSpacing * 2 / 3,
+            Destination = node,
+            DestinationHandle = Handle.MiddleLeft
+          });
         }
         previousFamilies.Add(family);
       }
 
-      foreach (var connector in connectors.SelectMany(n => n.ToSvg()))
+      foreach (var connector in graphics.SelectMany(n => n.ToSvg()))
         result.Add(connector);
       foreach (var node in nodesById.Values.SelectMany(n => n.ToSvg()))
         result.Add(node);
@@ -130,7 +168,7 @@ namespace GedcomParser
       return result;
     }
 
-    private class Node : Rectangle
+    private class Node : Shape
     {
       private DiagramOptions _options;
 
@@ -141,31 +179,45 @@ namespace GedcomParser
       {
         _options = options;
         Name = individual.Name.Name;
-        Dates = $"{individual.BirthDate:s} - {individual.DeathDate:s}";
-        if (individual.BirthDate.TryGetDiff(individual.DeathDate, out var minAge, out var maxAge))
-        {
-          var age = (minAge.Years + maxAge.Years) / 2;
-          Dates = age.ToString() + "y, " + Dates;
-        }
+        Dates = individual.DateString;
         Width = Math.Max(sizer(options.FontName, 16, Name), sizer(options.FontName, 12, Dates));
         return this;
       }
 
-      public IEnumerable<XElement> ToSvg()
+      public override IEnumerable<XElement> ToSvg()
       {
-        yield return new XElement(svgNs + "g"
+        yield return new XElement(Svg.Ns + "g"
             , new XAttribute("transform", $"translate({Left},{Top})")
-            , new XElement(svgNs + "text"
+            , new XElement(Svg.Ns + "text"
                 , new XAttribute("x", 0)
                 , new XAttribute("y", 18)
                 , new XAttribute("style", "font-size:16px;font-family:" + _options.FontName)
                 , Name)
-            , new XElement(svgNs + "text"
+            , new XElement(Svg.Ns + "text"
                 , new XAttribute("x", 0)
                 , new XAttribute("y", Height - 4)
                 , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + _options.FontName)
                 , Dates)
         );
+      }
+    }
+
+    private class Dot : Shape
+    {
+      public Dot()
+      {
+        Width = 6;
+        Height = 6;
+      }
+
+      public override IEnumerable<XElement> ToSvg()
+      {
+        yield return new XElement(Svg.Ns + "ellipse"
+          , new XAttribute("cx", MidX)
+          , new XAttribute("cy", MidY)
+          , new XAttribute("rx", Width / 2)
+          , new XAttribute("ry", Height / 2)
+          , new XAttribute("style", "fill:black"));
       }
     }
   }

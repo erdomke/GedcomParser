@@ -2,14 +2,21 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
+using YamlDotNet.Core.Tokens;
+using static Microsoft.WindowsAPICodePack.Shell.PropertySystem.SystemProperties.System;
 
 namespace GedcomParser
 {
-  internal class Connector
+  internal interface ISvgGraphic
   {
-    public Rectangle Source { get; set; }
+    IEnumerable<XElement> ToSvg();
+  }
+
+  internal class Connector: ISvgGraphic
+  {
+    public Shape Source { get; set; }
     public Handle SourceHandle { get; set; }
-    public Rectangle Destination { get; set; }
+    public Shape Destination { get; set; }
     public Handle DestinationHandle { get; set; }
     public double SourceHorizontalOffset { get; set; }
 
@@ -35,6 +42,7 @@ namespace GedcomParser
     TopCenter,
     TopRight,
     MiddleLeft,
+    MiddleCenter,
     MiddleRight,
     BottomLeft,
     BottomCenter,
@@ -53,7 +61,7 @@ namespace GedcomParser
     }
   }
 
-  internal class Rectangle
+  internal abstract class Shape: ISvgGraphic
   {
     private double _left;
     private Dependency _leftSource;
@@ -107,30 +115,33 @@ namespace GedcomParser
           return new Point(Left + xOffset, Bottom + yOffset);
         case GedcomParser.Handle.BottomCenter:
           return new Point(MidX + xOffset, Bottom + yOffset);
-        //case GedcomParser.Handle.BottomRight:
-        default:
+        case GedcomParser.Handle.BottomRight:
           return new Point(Right + xOffset, Bottom + yOffset);
+        default:
+          return new Point(MidX + xOffset, MidY + yOffset);
       }
     }
 
-    public void InsertAfter(Rectangle value, Func<Rectangle, Rectangle, double> newValue)
+    public void InsertAfter(IEnumerable<Shape> previous, Func<Shape, Shape, double> newValue)
     {
-      var existing = _dependencies.Where(d => d.Vertical && d.Target.Top > Bottom).ToList();
+      var existing = previous
+        .SelectMany(s => s._dependencies.Where(d => d.Vertical && d.Target.Top > d.Source.Bottom))
+        .ToList();
       foreach (var dependency in existing)
       {
         dependency.Remove();
-        dependency.Target.SetTopDependency(value, dependency.NewValue);
+        dependency.Target.SetTopDependency(this, dependency.NewValue);
       }
-      value.SetTopDependency(this, newValue);
+      this.SetTopDependency(previous.First(), newValue);
     }
 
-    public void SetLeftDependency(Rectangle source, Func<Rectangle, Rectangle, double> newValue)
+    public void SetLeftDependency(Shape source, Func<Shape, Shape, double> newValue)
     {
       _leftSource?.Remove();
       _leftSource = new Dependency(source, this, true, newValue);
     }
 
-    public void SetTopDependency(Rectangle source, Func<Rectangle, Rectangle, double> newValue)
+    public void SetTopDependency(Shape source, Func<Shape, Shape, double> newValue)
     {
       _topSource?.Remove();
       _topSource = new Dependency(source, this, false, newValue);
@@ -156,15 +167,17 @@ namespace GedcomParser
       }
     }
 
+    public abstract IEnumerable<XElement> ToSvg();
+
     internal class Dependency
     {
       public bool Horizontal { get; }
-      public Func<Rectangle, Rectangle, double> NewValue { get;}
-      public Rectangle Source { get; }
-      public Rectangle Target { get; }
+      public Func<Shape, Shape, double> NewValue { get;}
+      public Shape Source { get; }
+      public Shape Target { get; }
       public bool Vertical => !Horizontal;
 
-      public Dependency(Rectangle source, Rectangle target, bool horizontal, Func<Rectangle, Rectangle, double> newValue)
+      public Dependency(Shape source, Shape target, bool horizontal, Func<Shape, Shape, double> newValue)
       {
         Source = source;
         Horizontal = horizontal;
