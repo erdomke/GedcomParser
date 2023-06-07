@@ -88,6 +88,9 @@ namespace GedcomParser
               .OfType<YamlMappingNode>()
               .Select(c => Event(c, database)));
             break;
+          case "picture":
+            individual.Picture = Media((YamlMappingNode)property.Value, database);
+            break;
         }
       }
       return individual;
@@ -463,30 +466,7 @@ namespace GedcomParser
       {
         foreach (var mediaNode in mediaListNode.Children.OfType<YamlMappingNode>())
         {
-          var media = new Media();
-          foreach (var property in mediaNode.Children)
-          {
-            switch ((string)property.Key)
-            {
-              case "src":
-                media.Src = (string)property.Value;
-                break;
-              case "description":
-                media.Description = (string)property.Value;
-                break;
-              case "mimetype":
-                media.MimeType = (string)property.Value;
-                break;
-              case "date":
-                media.Date = ExtendedDateRange.Parse((string)property.Value);
-                break;
-              case "place":
-                media.Place = Create(null, property.Value as YamlMappingNode, database, Place);
-                break;
-            }
-          }
-          AddCommonProperties(media, mediaNode, database);
-          hasMedia.Media.Add(media);
+          hasMedia.Media.Add(Media(mediaNode, database));
         }
       }
 
@@ -534,6 +514,34 @@ namespace GedcomParser
           hasCitations.Citations.Add(Create(null, citationNode, database, Citation));
         }
       }
+    }
+
+    private Media Media(YamlMappingNode mediaNode, Database database)
+    {
+      var media = new Media();
+      foreach (var property in mediaNode.Children)
+      {
+        switch ((string)property.Key)
+        {
+          case "src":
+            media.Src = (string)property.Value;
+            break;
+          case "description":
+            media.Description = (string)property.Value;
+            break;
+          case "mimetype":
+            media.MimeType = (string)property.Value;
+            break;
+          case "date":
+            media.Date = ExtendedDateRange.Parse((string)property.Value);
+            break;
+          case "place":
+            media.Place = Create(null, property.Value as YamlMappingNode, database, Place);
+            break;
+        }
+      }
+      AddCommonProperties(media, mediaNode, database);
+      return media;
     }
   }
 }

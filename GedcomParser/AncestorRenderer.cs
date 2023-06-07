@@ -27,13 +27,13 @@ namespace GedcomParser
     public XElement Render(Database database, string root)
     {
       var nodes = new List<Node>
-            {
-                new Node()
-                {
-                    Id = root,
-                    Column = 0
-                }.UpdateText(database, Sizer)
-            };
+      {
+          new Node()
+          {
+              Id = root,
+              Column = 0
+          }.UpdateText(database, Sizer)
+      };
       for (var idx = 0; idx < nodes.Count; idx++)
       {
         foreach (var parent in database

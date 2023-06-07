@@ -12,6 +12,7 @@ namespace GedcomParser.Model
     public Identifiers Id { get; } = new Identifiers();
     public string DuplicateOf { get; set; }
 
+    public Media Picture { get; set; }
     public Sex Sex { get; set; }
     public PersonName Name => Names.FirstOrDefault()?.Name ?? default;
     public ExtendedDateRange BirthDate => Events.FirstOrDefault(e => e.Type == EventType.Birth)?.Date ?? default;

@@ -1,6 +1,7 @@
 ﻿using GedcomParser.Model;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Media;
 using System.Xml.Linq;
@@ -21,14 +22,9 @@ namespace GedcomParser
   {
     private DiagramOptions _options = new DiagramOptions();
 
-    public GetTextWidth Sizer { get; set; }
+    public IGraphics Graphics { get; set; }
 
-    public FamilyRenderer()
-    {
-      Sizer = (f, p, t) => _options.NodeWidth;
-    }
-
-    public XElement Render(IEnumerable<ResolvedFamily> families)
+    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
     {
       var result = new XElement(Svg.Ns + "svg");
 
@@ -69,7 +65,7 @@ namespace GedcomParser
           .Where(p => !nodesById.ContainsKey(p.Id.Primary))
           .OrderByDescending(p => familyList.Count(f => f.Parents.Contains(p))))
         {
-          var node = new Node().UpdateText(parent, Sizer, _options);
+          var node = new Node().UpdateContents(parent, Graphics, _options, baseDirectory);
           if (previousParent == null)
           {
             var lastFirstRow = nodesById.Values
@@ -80,7 +76,14 @@ namespace GedcomParser
             if (lastFirstRow == null)
               node.Left = 0;
             else
+            {
               node.SetLeftDependency(lastFirstRow, (source, target) => source.Right + _options.HorizontalSpacing);
+              var rowHeight = Math.Max(node.Height, nodesById.Values
+                .Where(n => n.Top == 0)
+                .Max(n => n.Height));
+              foreach (var firstRowNode in nodesById.Values.Where(n => n.Top == 0).Append(node))
+                firstRowNode.Height = rowHeight;
+            }
             parentAnchor = node;
           }
           else
@@ -88,6 +91,9 @@ namespace GedcomParser
             if (startAfter == null)
             {
               node.SetTopDependency(previousParent, (source, target) => source.Top);
+              var rowHeight = Math.Max(previousParent.Height, node.Height);
+              previousParent.Height = rowHeight;
+              node.Height = rowHeight;
               graphics.Add(new Connector()
               {
                 Source = previousParent,
@@ -127,7 +133,7 @@ namespace GedcomParser
           .OrderBy(i => familyList.FindIndex(f => f.Parents.Contains(i)))
           .ThenBy(i => i.BirthDate))
         {
-          var node = new Node().UpdateText(child, Sizer, _options);
+          var node = new Node().UpdateContents(child, Graphics, _options, baseDirectory);
           nodesById[child.Id.Primary] = node;
           node.SetLeftDependency(familyNodes.First(), (source, target) => source.Left + _options.HorizontalSpacing);
           node.InsertAfter(previousRow, (source, target) => source.Bottom + _options.VerticalSpacing);
@@ -170,35 +176,78 @@ namespace GedcomParser
 
     private class Node : Shape
     {
+      private const int ImageRightMargin = 4;
+      private const int MaxImageHeight = 96;
+
       private DiagramOptions _options;
+
+      private Size _imageSize;
+      private double _line1Height;
+      private double _line2Height;
 
       public string Name { get; private set; }
       public string Dates { get; private set; }
+      public string ImagePath { get; private set; }
 
-      public Node UpdateText(Individual individual, GetTextWidth sizer, DiagramOptions options)
+      public Node UpdateContents(Individual individual, IGraphics graphics, DiagramOptions options, string baseDirectory)
       {
         _options = options;
         Name = individual.Name.Name;
         Dates = individual.DateString;
-        Width = Math.Max(sizer(options.FontName, 16, Name), sizer(options.FontName, 12, Dates));
+        var nameSize = graphics.MeasureText(options.FontName, 16, Name);
+        var dateSize = graphics.MeasureText(options.FontName, 12, Dates);
+        Width = Math.Max(nameSize.Width, dateSize.Width);
+        _line1Height = nameSize.Height;
+        _line2Height = dateSize.Height;
+        Height = _line1Height + _line2Height + ImageRightMargin;
+
+        if (!string.IsNullOrEmpty(individual.Picture?.Src))
+        {
+          ImagePath = Path.Combine(baseDirectory, individual.Picture.Src);
+          using (var stream = File.OpenRead(ImagePath))
+          {
+            var size = graphics.MeasureImage(stream);
+            if (size.Height > MaxImageHeight)
+              _imageSize = new Size(size.Width * MaxImageHeight / size.Height, MaxImageHeight);
+            else
+              _imageSize = size;
+          }
+          if (_imageSize.Height > Height)
+            Height = _imageSize.Height;
+          Width += _imageSize.Width + ImageRightMargin;
+        }
+
         return this;
       }
 
       public override IEnumerable<XElement> ToSvg()
       {
-        yield return new XElement(Svg.Ns + "g"
+        var group = new XElement(Svg.Ns + "g"
             , new XAttribute("transform", $"translate({Left},{Top})")
-            , new XElement(Svg.Ns + "text"
-                , new XAttribute("x", 0)
-                , new XAttribute("y", 18)
-                , new XAttribute("style", "font-size:16px;font-family:" + _options.FontName)
-                , Name)
-            , new XElement(Svg.Ns + "text"
-                , new XAttribute("x", 0)
-                , new XAttribute("y", Height - 4)
-                , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + _options.FontName)
-                , Dates)
         );
+        var textStart = 0.0;
+        if (_imageSize.Width > 0)
+        {
+          textStart = _imageSize.Width + ImageRightMargin;
+          group.Add(new XElement(Svg.Ns + "image"
+            , new XAttribute("href", new Uri(ImagePath).ToString())
+            , new XAttribute("x", 0)
+            , new XAttribute("y", 0)
+            , new XAttribute("width", _imageSize.Width)
+            , new XAttribute("height", _imageSize.Height)));
+        }
+
+        group.Add(new XElement(Svg.Ns + "text"
+          , new XAttribute("x", textStart)
+          , new XAttribute("y", _line1Height)
+          , new XAttribute("style", "font-size:16px;font-family:" + _options.FontName)
+          , Name));
+        group.Add(new XElement(Svg.Ns + "text"
+          , new XAttribute("x", textStart)
+          , new XAttribute("y", _line1Height + ImageRightMargin + _line2Height)
+          , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + _options.FontName)
+          , Dates));
+        yield return group;
       }
     }
 

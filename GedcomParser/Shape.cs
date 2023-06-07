@@ -2,8 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
-using YamlDotNet.Core.Tokens;
-using static Microsoft.WindowsAPICodePack.Shell.PropertySystem.SystemProperties.System;
 
 namespace GedcomParser
 {
@@ -49,6 +47,18 @@ namespace GedcomParser
     BottomRight,
   }
 
+  public struct Size
+  {
+    public double Width { get; }
+    public double Height { get; }
+
+    public Size(double width, double height)
+    {
+      Width = width;
+      Height = height;
+    }
+  }
+
   internal struct Point
   {
     public double X { get; }
@@ -63,6 +73,7 @@ namespace GedcomParser
 
   internal abstract class Shape: ISvgGraphic
   {
+    private double _height = nodeHeight;
     private double _left;
     private Dependency _leftSource;
     private double _top;
@@ -88,12 +99,24 @@ namespace GedcomParser
       get { return _top; }
       set
       {
-        UpdateTop(_top);
+        UpdateTop(value);
         _topSource?.Remove();
       }
     }
     public double Width { get; set; } = nodeWidth;
-    public double Height { get; set; } = nodeHeight;
+    public double Height
+    { 
+      get { return _height; }
+      set
+      {
+        if (value != _height)
+        {
+          _height = value;
+          foreach (var dependency in _dependencies.Where(d => d.Vertical && d.Target.Top > Top))
+            dependency.Execute();
+        }
+      }
+    }
     public double MidX => Left + Width / 2;
     public double MidY => Top + Height / 2;
 

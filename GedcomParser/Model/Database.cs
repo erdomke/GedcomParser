@@ -17,6 +17,7 @@ namespace GedcomParser.Model
     private Lookup<string, FamilyLink> _relationships = new Lookup<string, FamilyLink>();
     private Lookup<IHasId, object> _whereUsed = new Lookup<IHasId, object>();
 
+    public string BasePath { get; set; }
 
     public void Add(IHasId primaryObject)
     {
@@ -167,6 +168,11 @@ namespace GedcomParser.Model
             foreach (var iEvent in individual.Events)
             {
               _whereUsed.Add(iEvent, individual);
+            }
+            if (individual.Picture != null)
+            {
+              _whereUsed.Add(individual.Picture, individual);
+              toProcess.Add(individual.Picture);
             }
             foreach (var family in individual.Id
               .SelectMany(i => _relationships[i])

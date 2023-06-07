@@ -1,9 +1,6 @@
 ﻿using GedcomParser.Model;
 using Markdig;
-using Microsoft.WindowsAPICodePack.Shell;
 using SixLabors.Fonts;
-using System;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -17,9 +14,20 @@ namespace GedcomParser
   {
     static void Main(string[] args)
     {
-      var db = new Database();
+      RoundTrip(args).Wait();
+      GenerateReport(args);
+    }
+
+    static void GenerateReport(string[] args)
+    {
+      var markdown = File.ReadAllText(@"C:\Users\erdomke\source\repos\FamilyTree\Report.md");
+
+      var db = new Database()
+      {
+        BasePath = @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"
+      };
       var yaml = new YamlStream();
-      using (var reader = new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"))
+      using (var reader = new StreamReader(db.BasePath))
         yaml.Load(reader);
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
@@ -30,11 +38,7 @@ namespace GedcomParser
       {
         Renderer = new FamilyRenderer()
         {
-          Sizer = (fontName, height, text) =>
-          {
-            var font = SixLabors.Fonts.SystemFonts.CreateFont(fontName, (float)height);
-            return TextMeasurer.Measure(text, new TextOptions(font)).Width;
-          }
+          Graphics = new SixLaborsGraphics()
         }
       });
 
@@ -62,7 +66,7 @@ namespace GedcomParser
         yaml.Load(reader);
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
-      db.MakeIdsHumanReadable();
+      //db.MakeIdsHumanReadable();
       new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
     }
 

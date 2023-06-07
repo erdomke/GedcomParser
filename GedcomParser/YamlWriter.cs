@@ -50,6 +50,8 @@ namespace GedcomParser
         node.Add("names", new YamlSequenceNode(individual.Names.Select(Visit)));
       if (individual.Sex != Sex.Unknown)
         node.Add("sex", individual.Sex.ToString());
+      if (individual.Picture != null)
+        node.Add("picture", Media(individual.Picture));
       if (individual.Events.Count > 0)
         node.Add("events", new YamlSequenceNode(individual.Events.Select(Visit)));
 
@@ -227,7 +229,7 @@ namespace GedcomParser
       {
         var place = new YamlMappingNode()
         {
-          Style = YamlDotNet.Core.Events.MappingStyle.Flow
+          Style = MappingStyle.Flow
         };
         place.Add("$ref", "#/places/" + eventObj.Place.Id.Primary);
         node.Add("place", place);
@@ -336,28 +338,7 @@ namespace GedcomParser
         foreach (var media in hasMedia.Media
           .OrderBy(m => m.Src ?? m.Description ?? ""))
         {
-          var mediaNode = new YamlMappingNode();
-          if (!string.IsNullOrEmpty(media.Src))
-            mediaNode.Add("src", media.Src);
-          if (!string.IsNullOrEmpty(media.Description))
-            mediaNode.Add("description", media.Description);
-          if (!string.IsNullOrEmpty(media.MimeType))
-            mediaNode.Add("mimetype", media.MimeType);
-          if (media.Date.HasValue)
-            mediaNode.Add("date", media.Date.ToString("s"));
-
-          if (media.Place != null)
-          {
-            var place = new YamlMappingNode()
-            {
-              Style = YamlDotNet.Core.Events.MappingStyle.Flow
-            };
-            place.Add("$ref", "#/places/" + media.Place.Id.Primary);
-            mediaNode.Add("place", place);
-          }
-
-          AddCommonProperties(mediaNode, media);
-          mediaRefs.Add(mediaNode);
+          mediaRefs.Add(Media(media));
         }
         if (mediaRefs.Any())
           mappingNode.Add("media", mediaRefs);
@@ -404,6 +385,32 @@ namespace GedcomParser
       {
         mappingNode.Add("$ref", $"#/places/" + hasId.DuplicateOf);
       }
+    }
+
+    private YamlMappingNode Media(Media media)
+    {
+      var mediaNode = new YamlMappingNode();
+      if (!string.IsNullOrEmpty(media.Src))
+        mediaNode.Add("src", media.Src);
+      if (!string.IsNullOrEmpty(media.Description))
+        mediaNode.Add("description", media.Description);
+      if (!string.IsNullOrEmpty(media.MimeType))
+        mediaNode.Add("mimetype", media.MimeType);
+      if (media.Date.HasValue)
+        mediaNode.Add("date", media.Date.ToString("s"));
+
+      if (media.Place != null)
+      {
+        var place = new YamlMappingNode()
+        {
+          Style = YamlDotNet.Core.Events.MappingStyle.Flow
+        };
+        place.Add("$ref", "#/places/" + media.Place.Id.Primary);
+        mediaNode.Add("place", place);
+      }
+
+      AddCommonProperties(mediaNode, media);
+      return mediaNode;
     }
   }
 }

@@ -127,7 +127,8 @@ namespace GedcomParser
 
             if (_extension.Renderer != null)
             {
-              childProcessor.ProcessLine(new StringSlice(_extension.Renderer.Render(group.Families).ToString()));
+              childProcessor.ProcessLine(new StringSlice(_extension.Renderer.Render(group.Families
+                , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
               childProcessor.ProcessLine(new StringSlice(""));
             }
 
