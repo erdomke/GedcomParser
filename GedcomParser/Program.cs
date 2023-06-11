@@ -40,16 +40,28 @@ namespace GedcomParser
       });
 
       var pipeline = builder.Build();
-      var html = Markdown.ToHtml(markdown, pipeline);
+      var body = Markdown.ToHtml(markdown, pipeline);
+      var html = @"<html>
+<head>
+  <style>
+  body {
+    font-family: Calibri;
+  }
+  main {
+    max-width: 7.5in;
+    margin: 0 auto;
+  }
+  date {
+    font-weight: bold;
+  }
+  </style>
+</head>
+<body><main>" + body + "<main></body></html>";
       File.WriteAllText(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html", html);
 
       var renderer = new AncestorRenderer()
       {
-        Sizer = (fontName, height, text) =>
-        {
-          var font = SixLabors.Fonts.SystemFonts.CreateFont(fontName, (float)height);
-          return TextMeasurer.Measure(text, new TextOptions(font)).Width;
-        }
+        Graphics = new SixLaborsGraphics()
       };
       var svg = renderer.Render(db, "DomkeEricMatthe19880316");
       svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
@@ -174,11 +186,7 @@ namespace GedcomParser
       new GedcomLoader().Load(db, structure);
       var renderer = new AncestorRenderer()
       {
-        Sizer = (fontName, height, text) =>
-        {
-          var font = SixLabors.Fonts.SystemFonts.CreateFont(fontName, (float)height);
-          return TextMeasurer.Measure(text, new TextOptions(font)).Width;
-        }
+        Graphics = new SixLaborsGraphics()
       };
       var svg = renderer.Render(db, "I322438959843");
       svg.Save(@"C:\Users\erdomke\source\GitHub\GedcomParser\Test3.svg");

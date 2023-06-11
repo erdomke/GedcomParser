@@ -12,14 +12,8 @@ namespace GedcomParser.Renderer
   {
     public IGraphics Graphics { get; set; }
 
-    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
+    internal static List<ResolvedEvent> AllEvents(IEnumerable<ResolvedFamily> families)
     {
-      var lines = families
-        .SelectMany(f => f.Members)
-        .Select(m => m.Individual)
-        .Distinct()
-        .Select(i => new IndividualTimeline(i))
-        .ToDictionary(i => i.Individual.Id.Primary);
       var events = families
         .SelectMany(f => f.Events)
         .Where(e => e.Event.Date.HasValue
@@ -28,16 +22,31 @@ namespace GedcomParser.Renderer
             || e.Event.Type == EventType.Marriage
             || e.Event.Type == EventType.Adoption))
         .ToList();
-      events.AddRange(lines.Values
-        .SelectMany(l => l.Individual.Events
+      events.AddRange(families
+        .SelectMany(f => f.Members)
+        .Select(m => m.Individual)
+        .Distinct()
+        .SelectMany(i => i.Events
           .Where(e => e.Type == EventType.Birth || e.Type == EventType.Death)
           .Select(e =>
           {
             var resolved = new ResolvedEvent(e);
-            resolved.Primary.Add(l.Individual);
+            resolved.Primary.Add(i);
             return resolved;
           }))
         .Where(n => !events.Any(e => e.Event.Type == n.Event.Type && e.Primary.Contains(n.Primary[0]))));
+      return events;
+    }
+
+    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
+    {
+      var lines = families
+        .SelectMany(f => f.Members)
+        .Select(m => m.Individual)
+        .Distinct()
+        .Select(i => new IndividualTimeline(i))
+        .ToDictionary(i => i.Individual.Id.Primary);
+      var events = AllEvents(families);
 
       var links = new List<EventLink>();
       foreach (var resolvedEvent in events)
@@ -66,7 +75,7 @@ namespace GedcomParser.Renderer
       var grid = new XElement(Svg.Ns + "g");
       result.Add(grid);
       
-      var top = 0;
+      var top = 0.0;
       var remaining = lines.Values
         .Where(l => l.Start.HasValue)
         .OrderBy(l => l.Start.Value)
@@ -101,7 +110,7 @@ namespace GedcomParser.Renderer
         line.Top = top;
         line.Height = 30;
         line.SetPosition(startDate.Value, pxPerDay, Graphics);
-        top += 40;
+        top += line.Height + 5;
         result.Add(line.ToSvg());
       }
       foreach (var eventLink in links
@@ -112,7 +121,7 @@ namespace GedcomParser.Renderer
         result.Add(eventLink.ToSvg());
       }
 
-      var height = top - 10 + 2;
+      var height = top;
 
       var lineCount = (endDate.Value.Year - startDate.Value.Year) / 10;
       var style = ReportStyle.Default;
@@ -188,7 +197,7 @@ namespace GedcomParser.Renderer
             , new XAttribute("y1", nodes[0].Item1.Top + 25)
             , new XAttribute("x2", DateX)
             , new XAttribute("y2", nodes.Last().Item1.Top + 25)
-            , new XAttribute("style", $"stroke-width: 1px; stroke: black; opacity:0.6;")));
+            , new XAttribute("style", $"stroke-width: 1px; stroke: black; opacity:0.4;")));
         }
         foreach (var node in nodes)
         {

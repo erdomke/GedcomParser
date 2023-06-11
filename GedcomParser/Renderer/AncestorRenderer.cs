@@ -6,23 +6,15 @@ using System.Xml.Linq;
 
 namespace GedcomParser
 {
-  public class AncestorRenderer
+  internal class AncestorRenderer
   {
-    public delegate double GetTextWidth(string font, double pixelHeight, string text);
-
     private static XNamespace svgNs = (XNamespace)"http://www.w3.org/2000/svg";
     private const int nodeHeight = 36;
     private const int nodeWidth = 300;
     private const int colSpacing = 40;
     private const int horizPadding = 2;
-    private const string fontName = "Verdana";
 
-    public GetTextWidth Sizer { get; set; }
-
-    public AncestorRenderer()
-    {
-      Sizer = (f, p, t) => nodeWidth;
-    }
+    public IGraphics Graphics { get; set; }
 
     public XElement Render(Database database, string root)
     {
@@ -32,7 +24,7 @@ namespace GedcomParser
           {
               Id = root,
               Column = 0
-          }.UpdateText(database, Sizer)
+          }.UpdateText(database, Graphics)
       };
       for (var idx = 0; idx < nodes.Count; idx++)
       {
@@ -45,7 +37,7 @@ namespace GedcomParser
             Type = parent.LinkType2,
             Child = nodes[idx],
             Column = nodes[idx].Column + 1
-          }.UpdateText(database, Sizer);
+          }.UpdateText(database, Graphics);
           nodes[idx].Parents.Add(newNode);
           nodes.Add(newNode);
         }
@@ -185,7 +177,7 @@ namespace GedcomParser
       public Node Above { get; set; }
       public Node Below { get; set; }
 
-      public Node UpdateText(Database database, GetTextWidth sizer)
+      public Node UpdateText(Database database, IGraphics graphics)
       {
         var individual = database.GetValue<Individual>(Id);
         Name = individual.Name.Name;
@@ -195,23 +187,25 @@ namespace GedcomParser
         //    var age = (minAge.Years + maxAge.Years) / 2;
         //    Dates = age.ToString() + "y, " + Dates;
         //}
-        Width = Math.Max(sizer(fontName, 16, Name), sizer(fontName, 12, Dates));
+        var style = ReportStyle.Default;
+        Width = Math.Max(graphics.MeasureText(style.FontName, style.BaseFontSize, Name).Width, graphics.MeasureText(style.FontName, style.BaseFontSize - 4, Dates).Width);
         return this;
       }
 
       public override IEnumerable<XElement> ToSvg()
       {
+        var style = ReportStyle.Default;
         yield return new XElement(svgNs + "g"
             , new XAttribute("transform", $"translate({Left},{Top})")
             , new XElement(svgNs + "text"
                 , new XAttribute("x", 0)
                 , new XAttribute("y", 18)
-                , new XAttribute("style", "font-size:16px;font-family:" + fontName)
+                , new XAttribute("style", $"font-size:{style.BaseFontSize}px;font-family:{style.FontName}")
                 , Name)
             , new XElement(svgNs + "text"
                 , new XAttribute("x", 0)
                 , new XAttribute("y", Height - 4)
-                , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + fontName)
+                , new XAttribute("style", $"fill:#999;font-size:{style.BaseFontSize - 4}px;font-family:{style.FontName}")
                 , Dates)
         );
         var lineStyle = "stroke:black;stroke-width:1px;fill:none";

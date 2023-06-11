@@ -131,6 +131,13 @@ namespace GedcomParser
             //childProcessor.ProcessLine(new StringSlice(familyRender.Render(group.Families
             //  , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
             //childProcessor.ProcessLine(new StringSlice(""));
+            var decendantRenderer = new DecendantLayout()
+            {
+              Graphics = _extension.Graphics
+            };
+            childProcessor.ProcessLine(new StringSlice(decendantRenderer.Render(group.Families
+              , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
+            childProcessor.ProcessLine(new StringSlice(""));
 
             var timelineRenderer = new TimelineRenderer()
             {
@@ -144,7 +151,7 @@ namespace GedcomParser
               .Where(e => e.Event.Date.HasValue)
               .OrderBy(e => e.Event.Date))
             {
-              childProcessor.ProcessLine(new StringSlice($"- {resolvedEvent.Event.Date:s}, {resolvedEvent.Description()}"));
+              childProcessor.ProcessLine(new StringSlice($"- <date>{resolvedEvent.Event.Date:yyyy MMM d}</date>: {resolvedEvent.Description()}"));
             }
           }
 

@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Microsoft.VisualBasic;
+using SixLabors.Fonts;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
@@ -358,38 +360,53 @@ namespace GedcomParser
       }
       else
       {
+        var parts = default(List<string>);
+
         var isSortable = format == "s";
         if (isSortable || format == "u")
+          parts = new List<string>() { "yyyy", "`-", "MM", "`-", "dd", (format == "s" ? "`T" : "` "), "HH", "`:", "mm", "`:", "ss" };
+        else
+          parts = SpecifierParts(format, formatProvider).ToList();
+
+        var precision = DateTimePrecision.Year;
+        if (Millisecond.HasValue)
+          precision = DateTimePrecision.Millisecond;
+        else if (Second.HasValue)
+          precision = DateTimePrecision.Second;
+        else if (Minute.HasValue)
+          precision = DateTimePrecision.Minute;
+        else if (Hour.HasValue)
+          precision = DateTimePrecision.Hour;
+        else if (Day.HasValue)
+          precision = DateTimePrecision.Day;
+        else if (Month.HasValue)
+          precision = DateTimePrecision.Month;
+
+        var lastValid = parts.Count - 1;
+        while (lastValid >= 0 && SpecifierPrecision(parts[lastValid]) > precision)
         {
-          var parts = new[] { "yyyy", "'-'MM", "'-'dd", (format == "s" ? "'T'" : " ") + "HH", "':'mm", "':'ss" };
-          var count = 1;
-          if (Second.HasValue)
-            count = 6;
-          else if (Minute.HasValue)
-            count = 5;
-          else if (Hour.HasValue)
-            count = 4;
-          else if (Day.HasValue)
-            count = 3;
-          else if (Month.HasValue)
-            count = 2;
-          format = string.Join("", parts, 0, count) + (format == "u" ? "'Z'" : "");
-          if (isSortable && count == 1 && Math.Abs(Year) >= 10000)
-            format = "'Y'" + format;
-          if (isSortable && Certainty != DateCertainty.Known)
-            format += "'~'";
+          lastValid--;
+          while (lastValid >= 0 && SpecifierPrecision(parts[lastValid]) == DateTimePrecision.Other)
+            lastValid--;
         }
+        parts = parts.Take(lastValid + 1).ToList();
+
+        if (format == "u" && precision >= DateTimePrecision.Second)
+          parts.Add("`Z");
+        if (isSortable && precision == DateTimePrecision.Year && Math.Abs(Year) >= 10000)
+          parts.Insert(0, "`Y");
+        if (isSortable && Certainty != DateCertainty.Known)
+          parts.Add("`~");
 
         var builder = new StringBuilder();
-        var index = 0;
         var dateFormat = DateTimeFormat(formatProvider);
-        while (TryConsumeSpecifier(format, formatProvider, ref index, out var specifier, out var constant))
+        foreach (var part in parts)
         {
-          switch (specifier ?? "")
+          switch (part)
           {
             case "d":
             case "dd":
-              builder.Append(Day.HasValue ? Day.Value.ToString("D" + specifier.Length) : new string('X', specifier.Length));
+              builder.Append(Day.HasValue ? Day.Value.ToString("D" + part.Length) : new string('X', part.Length));
               break;
             case "g":
             case "gg":
@@ -400,7 +417,7 @@ namespace GedcomParser
               break;
             case "M":
             case "MM":
-              builder.Append(Month.HasValue ? Month.Value.ToString("D" + specifier.Length) : new string('X', specifier.Length));
+              builder.Append(Month.HasValue ? Month.Value.ToString("D" + part.Length) : new string('X', part.Length));
               break;
             case "MMM":
               builder.Append(Month.HasValue ? dateFormat.GetAbbreviatedMonthName(Month.Value) : "XXX");
@@ -413,7 +430,7 @@ namespace GedcomParser
             case "yyy":
             case "yyyy":
             case "yyyyy":
-              var yearString = (specifier.Length <= 2 ? (Year % 100) : Year).ToString("D" + specifier.Length);
+              var yearString = (part.Length <= 2 ? (Year % 100) : Year).ToString("D" + part.Length);
               var mask = new string('X', (int)Precision - 1);
               if (mask.Length > 0
                   && int.TryParse(yearString.Substring(yearString.Length - mask.Length), out var maskInt)
@@ -428,31 +445,92 @@ namespace GedcomParser
                     .Append(mask);
               }
               break;
-            case "":
-              builder.Append(constant);
-              break;
             case "H":
             case "HH":
-              builder.Append(Hour.HasValue ? Hour.Value.ToString("D" + specifier.Length) : new string('X', specifier.Length));
+              builder.Append(Hour.HasValue ? Hour.Value.ToString("D" + part.Length) : new string('X', part.Length));
               break;
             case "m":
             case "mm":
-              builder.Append(Minute.HasValue ? Minute.Value.ToString("D" + specifier.Length) : new string('X', specifier.Length));
+              builder.Append(Minute.HasValue ? Minute.Value.ToString("D" + part.Length) : new string('X', part.Length));
               break;
             case "s":
             case "ss":
-              builder.Append(Second.HasValue ? Second.Value.ToString("D" + specifier.Length) : new string('X', specifier.Length));
+              builder.Append(Second.HasValue ? Second.Value.ToString("D" + part.Length) : new string('X', part.Length));
               break;
             case "f":
             case "ff":
             case "fff":
-              builder.Append(Millisecond.HasValue ? (Millisecond.Value % (int)Math.Pow(10, specifier.Length)).ToString("D" + specifier.Length) : new string('X', specifier.Length));
+              builder.Append(Millisecond.HasValue ? (Millisecond.Value % (int)Math.Pow(10, part.Length)).ToString("D" + part.Length) : new string('X', part.Length));
               break;
             default:
-              throw new InvalidOperationException($"Invalid format string {format}");
+              if (part.StartsWith("`"))
+                builder.Append(part.Substring(1));
+              else
+                throw new InvalidOperationException($"Invalid format string {format}");
+              break;
           }
         }
         return builder.ToString();
+      }
+    }
+
+    private DateTimePrecision SpecifierPrecision(string part)
+    {
+      switch (part)
+      {
+        case "d":
+        case "dd":
+          return DateTimePrecision.Day;
+        case "M":
+        case "MM":
+        case "MMM":
+        case "MMMM":
+          return DateTimePrecision.Month;
+        case "y":
+        case "yy":
+        case "yyy":
+        case "yyyy":
+        case "yyyyy":
+          return DateTimePrecision.Year;
+        case "H":
+        case "HH":
+          return DateTimePrecision.Hour;
+        case "m":
+        case "mm":
+          return DateTimePrecision.Minute;
+        case "s":
+        case "ss":
+          return DateTimePrecision.Second;
+        case "f":
+        case "ff":
+        case "fff":
+          return DateTimePrecision.Millisecond;
+        default:
+          return DateTimePrecision.Other;
+      }
+    }
+
+    private enum DateTimePrecision
+    {
+      Other = 0,
+      Year = 1,
+      Month = 2,
+      Day = 3,
+      Hour = 4,
+      Minute = 5,
+      Second = 6,
+      Millisecond = 7,
+  }
+
+    private IEnumerable<string> SpecifierParts(string format, IFormatProvider formatProvider)
+    {
+      var index = 0;
+      while (TryConsumeSpecifier(format, formatProvider, ref index, out var specifier, out var constant))
+      {
+        if (specifier == null)
+          yield return "`" + constant;
+        else
+          yield return specifier;
       }
     }
 
