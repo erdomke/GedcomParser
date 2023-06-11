@@ -31,7 +31,8 @@ namespace GedcomParser
       var nodesById = new Dictionary<string, Node>();
       var graphics = new List<ISvgGraphic>();
       var previousFamilies = new List<ResolvedFamily>();
-      var familyList = families.ToList();
+      var familyList = families
+        .ToList();
       foreach (var family in familyList)
       {
         var familyNodes = family.Parents

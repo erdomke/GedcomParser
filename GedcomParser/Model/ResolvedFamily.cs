@@ -92,7 +92,9 @@ namespace GedcomParser.Model
             var resolved = new ResolvedEvent(individualEvent);
             resolved.Primary.Add(familyList.Key);
             resolved.PrimaryRole = individualFamilies[idx].Item1;
-            if (individualFamilies[idx].Item1.HasFlag(FamilyLinkType.Child))
+            if (individualFamilies[idx].Item1.HasFlag(FamilyLinkType.Child)
+              && (individualEvent.Type == EventType.Birth
+                || individualEvent.Type == EventType.Adoption))
               resolved.Secondary.AddRange(individualFamilies[idx].Item2.Parents);
             individualFamilies[idx].Item2.Events.Add(resolved);
           }

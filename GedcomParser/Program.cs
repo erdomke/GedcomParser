@@ -36,10 +36,7 @@ namespace GedcomParser
         .UseGenericAttributes();
       builder.Extensions.Add(new FencedDivExtension(db)
       {
-        Renderer = new FamilyRenderer()
-        {
-          Graphics = new SixLaborsGraphics()
-        }
+        Graphics = new SixLaborsGraphics()
       });
 
       var pipeline = builder.Build();

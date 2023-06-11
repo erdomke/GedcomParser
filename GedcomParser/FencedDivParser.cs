@@ -1,10 +1,9 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using Markdig;
 using Markdig.Helpers;
 using Markdig.Parsers;
 using Markdig.Renderers;
-using Markdig.Renderers.Html;
-using Markdig.Renderers.Roundtrip;
 using Markdig.Syntax;
 using System;
 using System.Collections.Generic;
@@ -19,7 +18,7 @@ namespace GedcomParser
     private IEnumerable<ResolvedFamily> _families;
 
     public Database Database { get; }
-    public FamilyRenderer Renderer { get; set; }
+    public IGraphics Graphics { get; set; }
 
     public FencedDivExtension(Database database)
     {
@@ -125,12 +124,21 @@ namespace GedcomParser
               childProcessor.ProcessLine(new StringSlice(""));
             }
 
-            if (_extension.Renderer != null)
+            //var familyRender = new FamilyRenderer()
+            //{
+            //  Graphics = _extension.Graphics
+            //};
+            //childProcessor.ProcessLine(new StringSlice(familyRender.Render(group.Families
+            //  , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
+            //childProcessor.ProcessLine(new StringSlice(""));
+
+            var timelineRenderer = new TimelineRenderer()
             {
-              childProcessor.ProcessLine(new StringSlice(_extension.Renderer.Render(group.Families
-                , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
-              childProcessor.ProcessLine(new StringSlice(""));
-            }
+              Graphics = _extension.Graphics
+            };
+            childProcessor.ProcessLine(new StringSlice(timelineRenderer.Render(group.Families
+              , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
+            childProcessor.ProcessLine(new StringSlice(""));
 
             foreach (var resolvedEvent in group.Families.SelectMany(f => f.Events)
               .Where(e => e.Event.Date.HasValue)

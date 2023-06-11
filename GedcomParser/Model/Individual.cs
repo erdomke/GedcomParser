@@ -14,7 +14,7 @@ namespace GedcomParser.Model
 
     public Media Picture { get; set; }
     public Sex Sex { get; set; }
-    public PersonName Name => Names.FirstOrDefault()?.Name ?? default;
+    public PersonName Name => Names.OrderBy(n => n.Type == NameType.Birth ? 0 : 1).FirstOrDefault()?.Name ?? default;
     public ExtendedDateRange BirthDate => Events.FirstOrDefault(e => e.Type == EventType.Birth)?.Date ?? default;
     public ExtendedDateRange DeathDate => Events.FirstOrDefault(e => e.Type == EventType.Death)?.Date ?? default;
     public List<IndividualName> Names { get; } = new List<IndividualName>();
