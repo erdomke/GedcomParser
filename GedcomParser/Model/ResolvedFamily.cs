@@ -6,7 +6,8 @@ namespace GedcomParser.Model
 {
   internal class ResolvedFamily
   {
-    public Identifiers Id { get; }
+    public Identifiers Id => Family.Id;
+    public Family Family { get; }
 
     public IEnumerable<Individual> Parents => Members
       .Where(m => m.Role.HasFlag(FamilyLinkType.Parent))
@@ -18,7 +19,7 @@ namespace GedcomParser.Model
 
     private ResolvedFamily(Family family, Database db)
     {
-      Id = family.Id;
+      Family = family;
       Members = db.FamilyLinks(family, FamilyLinkType.Other)
         .Select(l => new FamilyMember(db.GetValue<Individual>(l.Individual), l.Type))
         .ToList();

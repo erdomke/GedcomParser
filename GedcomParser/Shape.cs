@@ -71,7 +71,7 @@ namespace GedcomParser
     }
   }
 
-  internal abstract class Shape: ISvgGraphic
+  internal abstract class Shape : ISvgGraphic
   {
     private double _height = nodeHeight;
     private double _left;
@@ -83,18 +83,27 @@ namespace GedcomParser
     private const int nodeHeight = 36;
     private const int nodeWidth = 300;
 
-    public double Left 
-    { 
+    public double Left
+    {
       get { return _left; }
-      set 
+      set
       {
         UpdateLeft(value);
         _leftSource?.Remove();
       }
     }
-    public double Right => Left + Width;
-    public double Bottom => Top + Height;
-    public double Top 
+    public double Right
+    {
+      get => Left + Width;
+      set => Left = value - Width;
+    }
+
+    public double Bottom
+    {
+      get => Top + Height;
+      set => Top = value - Height;
+    }
+    public double Top
     {
       get { return _top; }
       set
@@ -105,7 +114,7 @@ namespace GedcomParser
     }
     public double Width { get; set; } = nodeWidth;
     public double Height
-    { 
+    {
       get { return _height; }
       set
       {
@@ -117,8 +126,16 @@ namespace GedcomParser
         }
       }
     }
-    public double MidX => Left + Width / 2;
-    public double MidY => Top + Height / 2;
+    public double MidX
+    {
+      get => Left + Width / 2;
+      set => Left = value - Width / 2;
+    }
+    public double MidY
+    {
+      get => Top + Height / 2;
+      set => Top = value - Height / 2;
+    }
 
     public Point Handle(Handle handle, double xOffset = 0, double yOffset = 0)
     {

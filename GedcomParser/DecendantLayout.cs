@@ -1,4 +1,5 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using Microsoft.Msagl.Core.Geometry.Curves;
 using Microsoft.Msagl.Core.Layout;
 using Microsoft.Msagl.Core.Routing;
@@ -16,31 +17,78 @@ namespace GedcomParser
   {
     public IGraphics Graphics { get; set; }
 
-    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
+    private static IEnumerable<Individual> OrderedIndividuals(IEnumerable<ResolvedFamily> families)
     {
-      var personReference = families
+      var eventsByIndividualId = TimelineRenderer.AllEvents(families)
+        .SelectMany(e => e.Primary.Concat(e.Secondary).Select(i => new
+        {
+          IndividualId = i.Id.Primary,
+          Event = e
+        }))
+        .OrderBy(i => i.Event.Event.Date)
+        .ToLookup(i => i.IndividualId, i => i.Event);
+      var allIndividuals = families
         .SelectMany(f => f.Members)
         .Select(m => m.Individual)
         .Distinct()
-        .OrderBy(i => i.BirthDate)
-        .Select(i => new Person(i, Graphics, baseDirectory))
-        .ToDictionary(p => p.Individual.Id.Primary);
-      //var familyNodes = new List<Node>();
+        .OrderBy(i => {
+          var firstEvent = eventsByIndividualId[i.Id.Primary].FirstOrDefault();
+          if (firstEvent == null)
+            return new ExtendedDateRange(ExtendedDateTime.Parse(DateTime.UtcNow.ToString("s")));
+          return firstEvent.Event.Date;
+        })
+        .ToList();
 
-      var graph = new GeometryGraph();
-      foreach (var person in personReference.Values)
-        graph.Nodes.Add(person.Node);
-
-      foreach (var family in families)
+      var ordered = new List<Individual>();
+      while (allIndividuals.Any(i => !ordered.Contains(i)))
       {
-        var familyNode = new Node(CurveFactory.CreateRectangle(2, 2, new Microsoft.Msagl.Core.Geometry.Point()));
+        ordered.Add(allIndividuals.First(i => !ordered.Contains(i)));
+        for (var i = ordered.Count - 1; i < ordered.Count; i++)
+        {
+          var insertAt = i;
+          foreach (var eventObj in eventsByIndividualId[ordered[i].Id.Primary])
+          {
+            var newIds = new HashSet<string>(eventObj.Primary
+              .Concat(eventObj.Secondary)
+              .Where(i => !ordered.Contains(i))
+              .Select(i => i.Id.Primary));
+            foreach (var individual in allIndividuals.Where(i => newIds.Contains(i.Id.Primary)))
+            {
+              insertAt++;
+              ordered.Insert(insertAt, individual);
+            }
+          }
+        }
+      }
+      return ordered;
+    }
+
+    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
+    {
+      var personReference = new Dictionary<string, Person>();
+      
+      var graph = new GeometryGraph();
+      foreach (var person in OrderedIndividuals(families)
+        .Select(i => new Person(i, Graphics, baseDirectory))
+        .Reverse())
+      {
+        graph.Nodes.Add(person.Node);
+        personReference[person.Individual.Id.Primary] = person;
+      }
+
+      foreach (var family in families.Reverse())
+      {
+        var familyNode = new Node(CurveFactory.CreateRectangle(2, 2, new Microsoft.Msagl.Core.Geometry.Point()))
+        {
+          UserData = family.Family,
+        };
         graph.Nodes.Add(familyNode);
-        foreach (var parent in family.Parents)
+        foreach (var parent in family.Parents.Reverse())
         {
           var edge = new Edge(familyNode, personReference[parent.Id.Primary].Node);
           graph.Edges.Add(edge);
         }
-        foreach (var child in family.Children(FamilyLinkType.Birth))
+        foreach (var child in family.Children(FamilyLinkType.Birth).Reverse())
         {
           var edge = new Edge(personReference[child.Id.Primary].Node, familyNode);
           graph.Edges.Add(edge);
@@ -57,23 +105,111 @@ namespace GedcomParser
           EdgeRoutingMode = EdgeRoutingMode.Rectilinear  
         }
       }, null);
+
+      var familyIndices = new Dictionary<string, int>();
+      var offsetUp = 0;
+      var lastBottom = double.NaN;
+      var rows = graph.Nodes.GroupBy(n => Math.Round(n.Center.Y, 2))
+        .OrderBy(g => g.Key)
+        .Select(g => g.OrderBy(n => n.Center.X).ToList())
+        .ToList();
+      foreach (var row in rows)
+      {
+        var rowTop = row.Min(n => n.Center.Y - n.Height / 2) - offsetUp;
+        var i = 0;
+        foreach (var node in row.OrderBy(n => n.Center.X))
+        {
+          var newCenterY = rowTop + node.Height / 2;
+          node.Center = new Microsoft.Msagl.Core.Geometry.Point(node.Center.X, newCenterY);
+          if (node.UserData is Family family)
+            familyIndices[family.Id.Primary] = i;
+          i++;
+        }
+
+        lastBottom = row.Max(n => n.Center.Y + n.Height / 2);
+        offsetUp += 5;
+      }
+
+      const double edgeSpacing = 2.0;
       var result = new XElement(Svg.Ns + "svg");
       foreach (var person in personReference.Values)
         result.Add(person.ToSvg());
       var lineStyle = "stroke:black;stroke-width:1px;fill:none";
-      foreach (var edge in graph.Edges)
+      foreach (var edgeGroup in graph.Edges.GroupBy(e => e.Target))
       {
-        var midY = (edge.Curve.Start.Y + edge.Curve.End.Y) / 2;
-        var path = $"M {edge.Curve.Start.X} {edge.Curve.Start.Y} L {edge.Curve.Start.X} {midY} L {edge.Curve.End.X} {midY} L {edge.Curve.End.X} {edge.Curve.End.Y}";
-        result.Add(new XElement(Svg.Ns + "path"
-          , new XAttribute("style", lineStyle)
-          , new XAttribute("d", path)));
+        var edgeGroupList = edgeGroup.OrderBy(e => e.Source.Center.X).ToList();
+        var familyToParent = edgeGroupList[0].Source.UserData is Family;
+        var index = 0;
+        var offset = -1 * edgeGroupList.Count / 2.0;
+        var endXs = edgeGroupList
+          .Select(e =>
+          {
+            if (!familyToParent)
+              return e.Target.Center.X;
+            var left = e.Target.Center.X - e.Target.Width * 0.4;
+            var right = e.Target.Center.X + e.Target.Width * 0.4;
+            if (left <= e.Source.Center.X && e.Source.Center.X <= right)
+              return e.Source.Center.X;
+            return double.NaN;
+          })
+          .ToList();
+        var start = endXs.FindIndex(x => !double.IsNaN(x));
+        if (start == -1)
+        {
+          endXs = Enumerable.Range(-1 * endXs.Count / 2, endXs.Count)
+            .Select(i => edgeGroupList[0].Target.Center.X + i * edgeSpacing)
+            .ToList();
+        }
+        else if (start > 0)
+        {
+          for (var i = start - 1; i >= 0; i--)
+          {
+            endXs[i] = endXs[i + 1] - edgeSpacing;
+          }
+        }
+        start = endXs.FindIndex(x => double.IsNaN(x));
+        if (start >= 0)
+        {
+          for (var i = start; i < endXs.Count; i++)
+          {
+            endXs[i] = endXs[i - 1] + edgeSpacing;
+          }
+        }
+
+        foreach (var edge in edgeGroupList)
+        {
+          var id = ((IHasId)edge.Target.UserData).Id.Primary + "--" + ((IHasId)edge.Source.UserData).Id.Primary;
+          var startX = edge.Source.UserData is Family ? edge.Source.Center.X : edge.Curve.Start.X;
+          var startY = edge.Source.Center.Y - (edge.Source.UserData is Family ? 0 : edge.Source.Height / 2 + 2);
+          //var endX = edge.Target.Width < 3 ? edge.Target.Center.X : edge.Curve.End.X;
+          var endX = endXs[index];
+          var endY = edge.Target.Center.Y + (edge.Target.UserData is Family ? 0 : edge.Target.Height / 2 + 2);
+          var midY = startY - 12.5 + (familyToParent 
+            ? offset * edgeSpacing
+            : familyIndices[((IHasId)edge.Target.UserData).Id.Primary] * edgeSpacing) - 5;
+          var path = $"M {startX} {startY} L {startX} {midY} L {endX} {midY} L {endX} {endY}";
+          result.Add(new XElement(Svg.Ns + "path"
+            , new XAttribute("id", id)
+            , new XAttribute("style", lineStyle)
+            , new XAttribute("d", path)));
+          index++;
+          offset++;
+        }
+      }
+      foreach (var node in graph.Nodes.Where(n => n.Width < 3))
+      {
+        result.Add(new XElement(Svg.Ns + "circle"
+          , new XAttribute("id", ((IHasId)node.UserData).Id.Primary)
+          , new XAttribute("style", "fill:black")
+          , new XAttribute("cx", node.Center.X)
+          , new XAttribute("cy", node.Center.Y)
+          , new XAttribute("r", 2)));
       }
 
-      var left = personReference.Values.Min(p => p.Node.Center.X - p.Node.Width / 2);
-      var right = personReference.Values.Max(p => p.Node.Center.X + p.Node.Width / 2);
-      var top = personReference.Values.Min(p => p.Node.Center.Y - p.Node.Height / 2);
-      var bottom = personReference.Values.Max(p => p.Node.Center.Y + p.Node.Height / 2);
+      var left = graph.Nodes.Min(n => n.Center.X - n.Width / 2);
+      var right = graph.Nodes.Max(n => n.Center.X + n.Width / 2);
+      var top = graph.Nodes.Min(p => p.Center.Y - p.Height / 2);
+      var bottom = graph.Nodes.Max(p => p.Center.Y + p.Height / 2) + 2;
       var height = bottom - top;
       var width = right - left;
       result.SetAttributeValue("viewBox", $"{left} {top} {width} {height}");
@@ -81,7 +217,7 @@ namespace GedcomParser
       return result;
     }
 
-    private class Person
+    private class Person : Shape
     {
       private const int MaxImageHeight = 96;
       private Size _imageSize;
@@ -94,11 +230,11 @@ namespace GedcomParser
       public Person(Individual individual, IGraphics graphics, string baseDirectory)
       {
         Individual = individual;
-        if (string.IsNullOrEmpty(individual.Picture?.Src))
-        {
-          _imageSize = new Size(MaxImageHeight * 0.75, MaxImageHeight);
-        }
-        else
+        //{
+        //  _imageSize = new Size(MaxImageHeight * 0.75, MaxImageHeight);
+        //}
+        //else
+        if (!string.IsNullOrEmpty(individual.Picture?.Src))
         {
           ImagePath = Path.Combine(baseDirectory, individual.Picture.Src);
           using (var stream = File.OpenRead(ImagePath))
@@ -118,16 +254,22 @@ namespace GedcomParser
           _lines.Add(Measure(name.Name.Substring(0, name.SurnameStart).Trim(), graphics, style, style.BaseFontSize));
           _lines.Add(Measure(name.Name.Substring(name.SurnameStart).Trim(), graphics, style, style.BaseFontSize));
         }
+        else
+        {
+          _lines.Add(Measure(name.Name.Trim(), graphics, style, style.BaseFontSize));
+        }
         if (individual.BirthDate.HasValue)
           _lines.Add(Measure("B: " + individual.BirthDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
         if (individual.DeathDate.HasValue)
           _lines.Add(Measure("D: " + individual.BirthDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
         else if (individual.Events.Any(e => e.Type == EventType.Death || e.Type == EventType.Burial))
           _lines.Add(Measure("Deceased", graphics, style, style.BaseFontSize - 4));
-        var height = _lines.Select(l => l.Item2.Height).Append(_imageSize.Height).Sum();
-        var width = _lines.Select(l => l.Item2.Width).Append(_imageSize.Width).Max();
-        
-        Node = new Node(CurveFactory.CreateRectangle(width, height, new Microsoft.Msagl.Core.Geometry.Point()));
+        Height = _lines.Select(l => l.Item2.Height).Append(_imageSize.Height).Sum();
+        Width = _lines.Select(l => l.Item2.Width).Append(_imageSize.Width).Max();
+        Node = new Node(CurveFactory.CreateRectangle(Width, Height, new Microsoft.Msagl.Core.Geometry.Point()))
+        {
+          UserData = Individual
+        };
       }
 
       private (string, Size, double) Measure(string text, IGraphics graphics, ReportStyle style, double fontSize)
@@ -135,30 +277,22 @@ namespace GedcomParser
         return (text, graphics.MeasureText(style.FontName, fontSize, text), fontSize);
       }
 
-      public XElement ToSvg()
+      public override IEnumerable<XElement> ToSvg()
       {
         var group = new XElement(Svg.Ns + "g"
+          , new XAttribute("id", Individual.Id.Primary)
           , new XAttribute("transform", $"translate({Node.Center.X - Node.Width / 2},{Node.Center.Y - Node.Height / 2})")
         );
-        if (string.IsNullOrEmpty(ImagePath))
-        {
-          group.Add(new XElement(Svg.Ns + "rect"
-            , new XAttribute("x", Node.Width / 2 - _imageSize.Width / 2)
-            , new XAttribute("y", 0)
-            , new XAttribute("width", _imageSize.Width)
-            , new XAttribute("height", _imageSize.Height)
-            , new XAttribute("style", "fill:#eee;")));
-        }
-        else
-        {
-          group.Add(new XElement(Svg.Ns + "image"
-            , new XAttribute("href", new Uri(ImagePath).ToString())
-            , new XAttribute("x", Node.Width / 2 - _imageSize.Width / 2)
-            , new XAttribute("y", 0)
-            , new XAttribute("width", _imageSize.Width)
-            , new XAttribute("height", _imageSize.Height)));
-        }
-        var bottom = _imageSize.Height;
+        var bottom = 0.0;
+        //{
+        //  group.Add(new XElement(Svg.Ns + "rect"
+        //    , new XAttribute("x", Node.Width / 2 - _imageSize.Width / 2)
+        //    , new XAttribute("y", 0)
+        //    , new XAttribute("width", _imageSize.Width)
+        //    , new XAttribute("height", _imageSize.Height)
+        //    , new XAttribute("style", "fill:#eee;")));
+        //}
+        //else
         foreach (var line in _lines)
         {
           bottom += line.Item2.Height;
@@ -168,7 +302,17 @@ namespace GedcomParser
             , new XAttribute("style", $"font-size:{line.Item3}px;font-family:{ReportStyle.Default.FontName}")
             , line.Item1));
         }
-        return group;
+        if (!string.IsNullOrEmpty(ImagePath))
+        {
+          group.Add(new XElement(Svg.Ns + "image"
+            , new XAttribute("href", new Uri(ImagePath).ToString())
+            , new XAttribute("x", Node.Width / 2 - _imageSize.Width / 2)
+            , new XAttribute("y", bottom)
+            , new XAttribute("width", _imageSize.Width)
+            , new XAttribute("height", _imageSize.Height)));
+          //bottom = _imageSize.Height;
+        }
+        yield return group;
       }
     }
   }

@@ -405,6 +405,8 @@ namespace GedcomParser
       else
       {
         var result = factory(id, node, database);
+        if (!result.Id.Any())
+          result.Id.Add(result.GetPreferredId(database));
         database.Add(result);
         AddCommonProperties(result, node, database);
         return result;

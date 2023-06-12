@@ -27,7 +27,8 @@ namespace GedcomParser.Renderer
         .Select(m => m.Individual)
         .Distinct()
         .SelectMany(i => i.Events
-          .Where(e => e.Type == EventType.Birth || e.Type == EventType.Death)
+          .Where(e => e.Date.HasValue
+            && (e.Type == EventType.Birth || e.Type == EventType.Death))
           .Select(e =>
           {
             var resolved = new ResolvedEvent(e);
@@ -35,6 +36,7 @@ namespace GedcomParser.Renderer
             return resolved;
           }))
         .Where(n => !events.Any(e => e.Event.Type == n.Event.Type && e.Primary.Contains(n.Primary[0]))));
+      events.Sort((x, y) => x.Event.Date.CompareTo(y.Event.Date));
       return events;
     }
 
