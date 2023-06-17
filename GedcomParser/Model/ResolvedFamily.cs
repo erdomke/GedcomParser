@@ -85,17 +85,32 @@ namespace GedcomParser.Model
             end = individualFamilies[i + 1].Item2.StartDate;
           ranges.Add(new ExtendedDateRange(start, end));
         }
+
+        var individualEvents = new List<ResolvedEvent>();
         foreach (var individualEvent in familyList.Key.Events)
         {
-          var idx = ranges.FindIndex(r => r.InRange(individualEvent.Date));
+          if (individualEvent.Type == EventType.Burial)
+          {
+            var deathEvent = individualEvents.FirstOrDefault(e => e.Event.Type == EventType.Death);
+            if (deathEvent != null)
+            {
+              deathEvent.Related.Add(individualEvent);
+              continue;
+            }
+          }
+          individualEvents.Add(new ResolvedEvent(individualEvent));
+        }
+
+        foreach (var resolved in individualEvents)
+        {
+          var idx = ranges.FindIndex(r => r.InRange(resolved.Event.Date));
           if (idx >= 0)
           {
-            var resolved = new ResolvedEvent(individualEvent);
             resolved.Primary.Add(familyList.Key);
             resolved.PrimaryRole = individualFamilies[idx].Item1;
             if (individualFamilies[idx].Item1.HasFlag(FamilyLinkType.Child)
-              && (individualEvent.Type == EventType.Birth
-                || individualEvent.Type == EventType.Adoption))
+              && (resolved.Event.Type == EventType.Birth
+                || resolved.Event.Type == EventType.Adoption))
               resolved.Secondary.AddRange(individualFamilies[idx].Item2.Parents);
             individualFamilies[idx].Item2.Events.Add(resolved);
           }

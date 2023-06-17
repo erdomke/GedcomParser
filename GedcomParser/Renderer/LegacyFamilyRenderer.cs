@@ -18,7 +18,7 @@ namespace GedcomParser
     public string FontName { get; set; } = "Verdana";
   }
 
-  internal class FamilyRenderer
+  internal class LegacyFamilyRenderer
   {
     private DiagramOptions _options = new DiagramOptions();
 

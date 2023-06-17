@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 
@@ -13,6 +14,8 @@ namespace GedcomParser.Model
     public List<Individual> Secondary { get; } = new List<Individual>();
 
     public Event Event { get; }
+
+    public List<Event> Related { get; } = new List<Event>();
 
     public ResolvedEvent(Event eventObj)
     {
@@ -51,6 +54,25 @@ namespace GedcomParser.Model
 
       if (!string.IsNullOrEmpty(Event.Place?.Names.FirstOrDefault()?.Name))
         builder.Append(" at ").Append(Event.Place.Names.First().Name);
+      builder.Append('.');
+
+      foreach (var related in Related)
+      {
+        if (related.Type == EventType.Burial)
+        {
+          var pronoun = Primary.Count == 1 ? Primary[0].Pronoun() : "they";
+          builder
+            .Append(' ')
+            .Append(CultureInfo.InvariantCulture.TextInfo.ToTitleCase(pronoun))
+            .Append(pronoun == "they" ? " were " : " was ")
+            .Append("buried");
+          if (related.Date.HasValue)
+            builder.Append(" on ").Append(related.Date.ToString("yyyy MMM d"));
+          if (!string.IsNullOrEmpty(related.Place?.Names.FirstOrDefault()?.Name))
+            builder.Append(" at ").Append(related.Place.Names.First().Name);
+          builder.Append('.');
+        }
+      }
 
       return builder.ToString();
     }

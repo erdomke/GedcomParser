@@ -51,8 +51,12 @@ namespace GedcomParser
     max-width: 7.5in;
     margin: 0 auto;
   }
-  date {
+  time {
     font-weight: bold;
+  }
+  figure {
+    margin-left: 0;
+    margin-right: 0;
   }
   </style>
 </head>

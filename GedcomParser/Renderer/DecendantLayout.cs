@@ -213,7 +213,7 @@ namespace GedcomParser
       var height = bottom - top;
       var width = right - left;
       result.SetAttributeValue("viewBox", $"{left} {top} {width} {height}");
-      result.SetAttributeValue("style", $"width:{width}px;height:{height};");
+      result.SetAttributeValue("style", $"width:{width}px;height:{height};max-width:7.5in");
       return result;
     }
 

@@ -47,6 +47,19 @@ namespace GedcomParser.Model
       }
     }
 
+    public string Pronoun()
+    {
+      switch (Sex)
+      {
+        case Sex.Male:
+          return "he";
+        case Sex.Female:
+          return "she";
+        default:
+          return "they";
+      }
+    }
+
     public void BuildEqualityString(StringBuilder builder, Database db)
     {
       builder.Append(Sex.ToString());

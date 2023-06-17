@@ -40,7 +40,11 @@ namespace GedcomParser
 
     public void Setup(MarkdownPipeline pipeline, IMarkdownRenderer renderer)
     {
-      // Do nothing
+      var renderers = (renderer as HtmlRenderer)?.ObjectRenderers;
+      if (renderers != null && !renderers.Contains<FencedDivRenderer>())
+      {
+        renderers.Add(new FencedDivRenderer(this));
+      }
     }
   }
 
@@ -102,69 +106,7 @@ namespace GedcomParser
         {
           var builder = new StringBuilder();
           BuildLines(fencedDiv, builder);
-          var options = ReportOptions.Parse(builder.ToString());
-
-          var childProcessor = processor.CreateChild();
-          childProcessor.Open(fencedDiv.Parent);
-
-          var groups = FamilyGroup.Create(_extension.ResolvedFamilies(), options);
-          foreach (var group in groups)
-          {
-            childProcessor.ProcessLine(new StringSlice(""));
-            var title = "## " + group.Title;
-            if (group.Families.Count == 1)
-              title += $" {{#{group.Families[0].Id.Primary}}}";
-            childProcessor.ProcessLine(new StringSlice(title));
-            childProcessor.ProcessLine(new StringSlice(""));
-
-            if (group.Families.Count > 1)
-            {
-              foreach (var family in group.Families)
-                childProcessor.ProcessLine(new StringSlice($"<a id='{family.Id.Primary}'></a>"));
-              childProcessor.ProcessLine(new StringSlice(""));
-            }
-
-            var baseDirectory = Path.GetDirectoryName(_extension.Database.BasePath);
-
-            //var familyRender = new FamilyRenderer()
-            //{
-            //  Graphics = _extension.Graphics
-            //};
-            //childProcessor.ProcessLine(new StringSlice(familyRender.Render(group.Families
-            //  , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
-            //childProcessor.ProcessLine(new StringSlice(""));
-            var decendantRenderer = new DecendantLayout()
-            {
-              Graphics = _extension.Graphics
-            };
-            childProcessor.ProcessLine(new StringSlice(decendantRenderer.Render(group.Families
-              , baseDirectory).ToString()));
-            childProcessor.ProcessLine(new StringSlice(""));
-
-            var timelineRenderer = new TimelineRenderer()
-            {
-              Graphics = _extension.Graphics
-            };
-            childProcessor.ProcessLine(new StringSlice(timelineRenderer.Render(group.Families
-              , baseDirectory).ToString()));
-            childProcessor.ProcessLine(new StringSlice(""));
-
-            var mapRenderer = new MapRenderer();
-            if (mapRenderer.TryRender(group.Families, baseDirectory, out var map))
-            {
-              childProcessor.ProcessLine(new StringSlice(map.ToString()));
-              childProcessor.ProcessLine(new StringSlice(""));
-            }
-
-            foreach (var resolvedEvent in group.Families.SelectMany(f => f.Events)
-              .Where(e => e.Event.Date.HasValue)
-              .OrderBy(e => e.Event.Date))
-            {
-              childProcessor.ProcessLine(new StringSlice($"- <date>{resolvedEvent.Event.Date:yyyy MMM d}</date>: {resolvedEvent.Description()}"));
-            }
-          }
-
-          childProcessor.Close(fencedDiv);
+          fencedDiv.Options = ReportOptions.Parse(builder.ToString());
         }
       }
       return base.Close(processor, block);
@@ -331,6 +273,8 @@ namespace GedcomParser
     public FencedDiv(BlockParser parser) : base(parser)
     {
     }
+
+    public ReportOptions Options { get; internal set; }
 
     public bool FirstClose { get; set; } = true;
     public HashSet<string> ClassNames { get; } = new HashSet<string>();
