@@ -5,7 +5,7 @@ using System.Text;
 
 namespace GedcomParser.Model
 {
-  public class Family : IPrimaryObject
+  public class Family : IPrimaryObject, IHasEvents
   {
     public Identifiers Id { get; } = new Identifiers();
     public string DuplicateOf { get; set; }

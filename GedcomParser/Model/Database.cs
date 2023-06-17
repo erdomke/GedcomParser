@@ -142,6 +142,99 @@ namespace GedcomParser.Model
       UpdateIndices(Places());
     }
 
+    public void MoveResidenceEventsToFamily()
+    {
+      foreach (var resolvedFamily in ResolvedFamily.Resolve(Families(), this).ToList())
+      {
+        foreach (var group in resolvedFamily.Events
+          .Where(e => e.Event.Date.HasValue
+            && e.Event.Place != null
+            && (e.Event.Type == EventType.Residence || e.Event.Type == EventType.Census))
+          .GroupBy(e => e.Event.Date.ToString("s") + e.Event.Place.Id.Primary)
+          .Where(g => g.Skip(1).Any()))
+        {
+          var newEvent = CombineEvents(group.Select(e => e.Event));
+          resolvedFamily.Family.Events.Add(newEvent);
+
+          foreach (var original in group)
+          {
+            foreach (var individual in original.Primary)
+              individual.Events.Remove(original.Event);
+          }
+        }
+      }
+    }
+
+    public void CombineConsecutiveResidenceEvents()
+    {
+      foreach (var eventParent in Families().Cast<IHasEvents>().Concat(Individuals()))
+      {
+        var residenceEvents = eventParent.Events
+          .Where(e => e.Date.HasValue
+            && e.Place != null
+            && (e.Type == EventType.Residence || e.Type == EventType.Census))
+          .OrderBy(e => e.Date)
+          .ToList();
+        foreach (var group in CombineConsecutive(residenceEvents, e => e.Place.Id.Primary)
+          .Where(g => g.Skip(1).Any()))
+        {
+          var combined = CombineEvents(group);
+          var firstDate = group.First().Date;
+          var lastDate = group.Last().Date;
+          combined.Date = new ExtendedDateRange(
+            firstDate.Start.HasValue ? firstDate.Start : firstDate.End
+            , lastDate.End.HasValue ? lastDate.End : lastDate.Start
+            , DateRangeType.Range);
+          eventParent.Events.Insert(eventParent.Events.IndexOf(group.First()), combined);
+          foreach (var eventObj in group)
+            eventParent.Events.Remove(eventObj);
+        }
+      }
+    }
+
+    private Event CombineEvents(IEnumerable<Event> events)
+    {
+      var newEvent = new Event()
+      {
+        Type = events.First().Type,
+        Date = events.First().Date,
+        Place = events.First().Place,
+      };
+      foreach (var attr in events.SelectMany(e => e.Attributes)
+        .Distinct()
+        .GroupBy(k => k.Key))
+        newEvent.Attributes[attr.Key] = attr.First().Value;
+      newEvent.Citations.AddRange(events.SelectMany(e => e.Citations).Distinct());
+      newEvent.Links.AddRange(events.SelectMany(e => e.Links).GroupBy(l => l.Url.ToString()).Select(g => g.First()));
+      newEvent.Media.AddRange(events.SelectMany(e => e.Media).GroupBy(m => m.Src ?? m.Description).Select(g => g.First()));
+      newEvent.Notes.AddRange(events.SelectMany(e => e.Notes).GroupBy(n => n.Text).Select(g => g.First()));
+      return newEvent;
+    }
+
+    private IEnumerable<IEnumerable<TSource>> CombineConsecutive<TSource, TKey>(IEnumerable<TSource> values, Func<TSource, TKey> keyGetter)
+    {
+      if (!values.Any())
+        yield break;
+
+      var curr = values.Take(1).ToList();
+      var currKey = keyGetter(curr[0]);
+      foreach (var value in values.Skip(1))
+      {
+        var newKey = keyGetter(value);
+        if (newKey.Equals(currKey))
+        {
+          curr.Add(value);
+        }
+        else
+        {
+          yield return curr;
+          curr = new List<TSource>() { value };
+          currKey = newKey;
+        }
+      }
+      yield return curr;
+    }
+
     private void UpdateIndices<T>(IEnumerable<T> objects) where T : IHasId
     {
       foreach (var group in objects.GroupBy(i => i.GetPreferredId(this), StringComparer.OrdinalIgnoreCase))

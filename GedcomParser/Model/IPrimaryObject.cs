@@ -22,6 +22,11 @@ namespace GedcomParser.Model
     List<Citation> Citations { get; }
   }
 
+  public interface IHasEvents
+  {
+    public List<Event> Events { get; }
+  }
+
   public interface IHasLinks
   {
     List<Link> Links { get; }

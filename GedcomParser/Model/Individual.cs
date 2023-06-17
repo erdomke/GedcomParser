@@ -7,7 +7,7 @@ using System.Text;
 namespace GedcomParser.Model
 {
   [DebuggerDisplay("{Name}")]
-  public class Individual : IPrimaryObject
+  public class Individual : IPrimaryObject, IHasEvents
   {
     public Identifiers Id { get; } = new Identifiers();
     public string DuplicateOf { get; set; }

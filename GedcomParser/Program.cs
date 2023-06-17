@@ -76,6 +76,9 @@ namespace GedcomParser
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
       //db.MakeIdsHumanReadable();
+      db.MoveResidenceEventsToFamily();
+      db.CombineConsecutiveResidenceEvents();
+      //await db.GeocodePlaces();
       new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
     }
 

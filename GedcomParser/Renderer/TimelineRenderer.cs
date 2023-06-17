@@ -65,7 +65,7 @@ namespace GedcomParser.Renderer
       var startDate = lines.Values.Where(l => l.Start.HasValue).Min(l => l.Start);
       var endDate = lines.Values.Where(l => l.End.HasValue).Max(l => l.End);
 
-      var result = new XElement(Svg.Ns + "svg");
+      var result = new XElement(SvgUtil.Ns + "svg");
       if (!startDate.HasValue || !endDate.HasValue)
         return result;
 
@@ -74,7 +74,7 @@ namespace GedcomParser.Renderer
         endDate = new DateTime(endDate.Value.Year - (startDate.Value.Year % 10) + 10, 1, 1);
       var pxPerDay = 6 * 96.0 / (endDate.Value - startDate.Value).TotalDays;
 
-      var grid = new XElement(Svg.Ns + "g");
+      var grid = new XElement(SvgUtil.Ns + "g");
       result.Add(grid);
       
       var top = 0.0;
@@ -131,7 +131,7 @@ namespace GedcomParser.Renderer
       {
         var decadeStart = startDate.Value.AddYears(10 * i);
         var position = (decadeStart - startDate.Value).TotalDays * pxPerDay;
-        grid.Add(new XElement(Svg.Ns + "line"
+        grid.Add(new XElement(SvgUtil.Ns + "line"
           , new XAttribute("x1", position)
           , new XAttribute("y1", -14)
           , new XAttribute("x2", position)
@@ -139,7 +139,7 @@ namespace GedcomParser.Renderer
           , new XAttribute("style", $"stroke-width: 1px; stroke: black; opacity:0.1;")));
         if (i < lineCount)
         {
-          grid.Add(new XElement(Svg.Ns + "text"
+          grid.Add(new XElement(SvgUtil.Ns + "text"
             , new XAttribute("x", position + 1)
             , new XAttribute("y", -6)
             , new XAttribute("style", $"fill:#ccc;font-size:{style.BaseFontSize - 2}px;font-family:{style.FontName}")
@@ -191,10 +191,10 @@ namespace GedcomParser.Renderer
           .Where(n => n.Item1.Start.HasValue)
           .OrderBy(n => n.Item1.Top)
           .ToList();
-        var group = new XElement(Svg.Ns + "g");
+        var group = new XElement(SvgUtil.Ns + "g");
         if (nodes.Count > 1)
         {
-          group.Add(new XElement(Svg.Ns + "line"
+          group.Add(new XElement(SvgUtil.Ns + "line"
             , new XAttribute("x1", DateX)
             , new XAttribute("y1", nodes[0].Item1.Top + 25)
             , new XAttribute("x2", DateX)
@@ -203,7 +203,7 @@ namespace GedcomParser.Renderer
         }
         foreach (var node in nodes)
         {
-          group.Add(new XElement(Svg.Ns + "circle"
+          group.Add(new XElement(SvgUtil.Ns + "circle"
             , new XAttribute("cx", DateX)
             , new XAttribute("cy", node.Item1.Top + 25)
             , new XAttribute("r", 5)
@@ -239,7 +239,7 @@ namespace GedcomParser.Renderer
 
       public IndividualTimeline(Individual individual) 
       {
-        _group = new XElement(Svg.Ns + "g", new XAttribute("id", individual.Id.Primary));
+        _group = new XElement(SvgUtil.Ns + "g", new XAttribute("id", individual.Id.Primary));
         Individual = individual;
         var deathFound = individual.Events.Any(e => e.Type == EventType.Death
           || e.Type == EventType.Burial);
@@ -286,7 +286,7 @@ namespace GedcomParser.Renderer
         style.BaseFontSize = 14;
         var rectLeft = (Start.Value - startDate).TotalDays * pxPerDay;
         var rectWidth = (End.Value - Start.Value).TotalDays * pxPerDay;
-        _group.Add(new XElement(Svg.Ns + "rect"
+        _group.Add(new XElement(SvgUtil.Ns + "rect"
           , new XAttribute("x", rectLeft)
           , new XAttribute("y", Top + 20)
           , new XAttribute("width", rectWidth)
@@ -300,19 +300,19 @@ namespace GedcomParser.Renderer
         Left = rectLeft - (birthDateSize.Width + 10);
         Width = Math.Max(nameSize.Width, birthDateSize.Width + 10 + rectWidth + 10 + deathDateSize.Width);
 
-        _group.Add(new XElement(Svg.Ns + "text"
+        _group.Add(new XElement(SvgUtil.Ns + "text"
           , new XAttribute("x", Left)
           , new XAttribute("y", Top + 14)
           , new XAttribute("style", $"font-size:{style.BaseFontSize}px;font-family:{style.FontName}")
           , Name));
 
-        _group.Add(new XElement(Svg.Ns + "text"
+        _group.Add(new XElement(SvgUtil.Ns + "text"
           , new XAttribute("x", Left)
           , new XAttribute("y", Bottom)
           , new XAttribute("style", $"fill:#999;font-size:{dateFontSize}px;font-family:{style.FontName}")
           , BirthDate));
 
-        _group.Add(new XElement(Svg.Ns + "text"
+        _group.Add(new XElement(SvgUtil.Ns + "text"
           , new XAttribute("x", Right - deathDateSize.Width)
           , new XAttribute("y", Bottom)
           , new XAttribute("style", $"fill:#999;font-size:{dateFontSize}px;font-family:{style.FontName}")

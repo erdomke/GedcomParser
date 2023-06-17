@@ -124,6 +124,8 @@ namespace GedcomParser
               childProcessor.ProcessLine(new StringSlice(""));
             }
 
+            var baseDirectory = Path.GetDirectoryName(_extension.Database.BasePath);
+
             //var familyRender = new FamilyRenderer()
             //{
             //  Graphics = _extension.Graphics
@@ -136,7 +138,7 @@ namespace GedcomParser
               Graphics = _extension.Graphics
             };
             childProcessor.ProcessLine(new StringSlice(decendantRenderer.Render(group.Families
-              , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
+              , baseDirectory).ToString()));
             childProcessor.ProcessLine(new StringSlice(""));
 
             var timelineRenderer = new TimelineRenderer()
@@ -144,8 +146,15 @@ namespace GedcomParser
               Graphics = _extension.Graphics
             };
             childProcessor.ProcessLine(new StringSlice(timelineRenderer.Render(group.Families
-              , Path.GetDirectoryName(_extension.Database.BasePath)).ToString()));
+              , baseDirectory).ToString()));
             childProcessor.ProcessLine(new StringSlice(""));
+
+            var mapRenderer = new MapRenderer();
+            if (mapRenderer.TryRender(group.Families, baseDirectory, out var map))
+            {
+              childProcessor.ProcessLine(new StringSlice(map.ToString()));
+              childProcessor.ProcessLine(new StringSlice(""));
+            }
 
             foreach (var resolvedEvent in group.Families.SelectMany(f => f.Events)
               .Where(e => e.Event.Date.HasValue)

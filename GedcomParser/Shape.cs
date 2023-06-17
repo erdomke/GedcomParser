@@ -24,11 +24,11 @@ namespace GedcomParser
       var start = Source.Handle(SourceHandle, SourceHorizontalOffset);
       var end = Destination.Handle(DestinationHandle);
       if (start.Y == end.Y)
-        yield return new XElement(Svg.Ns + "path"
+        yield return new XElement(SvgUtil.Ns + "path"
           , new XAttribute("style", lineStyle)
           , new XAttribute("d", $"M {start.X} {start.Y} L {end.X} {end.Y}"));
       else
-        yield return new XElement(Svg.Ns + "path"
+        yield return new XElement(SvgUtil.Ns + "path"
           , new XAttribute("style", lineStyle)
           , new XAttribute("d", $"M {start.X} {start.Y} L {start.X} {end.Y} L {end.X} {end.Y}"));
     }
@@ -57,6 +57,37 @@ namespace GedcomParser
       Width = width;
       Height = height;
     }
+  }
+
+  internal struct Rectangle
+  {
+    public double Left { get; set; }
+    public double Top { get; set; }
+
+    public double MidX
+    {
+      get => Left + Width / 2;
+      set => Left = value - Width / 2;
+    }
+
+    public double MidY
+    {
+      get => Top + Height / 2;
+      set => Top = value - Height / 2;
+    }
+
+    public double Right 
+    {
+      get => Left + Width;
+      set => Width = value - Left;
+    }
+    public double Bottom
+    {
+      get => Top + Height;
+      set => Height = value - Top;
+    }
+    public double Width { get; set; }
+    public double Height { get; set; }
   }
 
   internal struct Point

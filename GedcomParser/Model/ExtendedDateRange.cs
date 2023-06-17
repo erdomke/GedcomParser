@@ -318,5 +318,36 @@ namespace GedcomParser
       }
       return 0;
     }
+
+
+    public static bool operator ==(ExtendedDateRange x, ExtendedDateRange y)
+    {
+      return x.Equals(y);
+    }
+
+    public static bool operator !=(ExtendedDateRange x, ExtendedDateRange y)
+    {
+      return !x.Equals(y);
+    }
+
+    public static bool operator >(ExtendedDateRange x, ExtendedDateRange y)
+    {
+      return x.CompareTo(y) > 0;
+    }
+
+    public static bool operator >=(ExtendedDateRange x, ExtendedDateRange y)
+    {
+      return x.CompareTo(y) >= 0;
+    }
+
+    public static bool operator <(ExtendedDateRange x, ExtendedDateRange y)
+    {
+      return x.CompareTo(y) < 0;
+    }
+
+    public static bool operator <=(ExtendedDateRange x, ExtendedDateRange y)
+    {
+      return x.CompareTo(y) <= 0;
+    }
   }
 }

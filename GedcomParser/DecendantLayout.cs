@@ -131,7 +131,7 @@ namespace GedcomParser
       }
 
       const double edgeSpacing = 2.0;
-      var result = new XElement(Svg.Ns + "svg");
+      var result = new XElement(SvgUtil.Ns + "svg");
       foreach (var person in personReference.Values)
         result.Add(person.ToSvg());
       var lineStyle = "stroke:black;stroke-width:1px;fill:none";
@@ -188,7 +188,7 @@ namespace GedcomParser
             ? offset * edgeSpacing
             : familyIndices[((IHasId)edge.Target.UserData).Id.Primary] * edgeSpacing) - 5;
           var path = $"M {startX} {startY} L {startX} {midY} L {endX} {midY} L {endX} {endY}";
-          result.Add(new XElement(Svg.Ns + "path"
+          result.Add(new XElement(SvgUtil.Ns + "path"
             , new XAttribute("id", id)
             , new XAttribute("style", lineStyle)
             , new XAttribute("d", path)));
@@ -198,7 +198,7 @@ namespace GedcomParser
       }
       foreach (var node in graph.Nodes.Where(n => n.Width < 3))
       {
-        result.Add(new XElement(Svg.Ns + "circle"
+        result.Add(new XElement(SvgUtil.Ns + "circle"
           , new XAttribute("id", ((IHasId)node.UserData).Id.Primary)
           , new XAttribute("style", "fill:black")
           , new XAttribute("cx", node.Center.X)
@@ -279,7 +279,7 @@ namespace GedcomParser
 
       public override IEnumerable<XElement> ToSvg()
       {
-        var group = new XElement(Svg.Ns + "g"
+        var group = new XElement(SvgUtil.Ns + "g"
           , new XAttribute("id", Individual.Id.Primary)
           , new XAttribute("transform", $"translate({Node.Center.X - Node.Width / 2},{Node.Center.Y - Node.Height / 2})")
         );
@@ -296,7 +296,7 @@ namespace GedcomParser
         foreach (var line in _lines)
         {
           bottom += line.Item2.Height;
-          group.Add(new XElement(Svg.Ns + "text"
+          group.Add(new XElement(SvgUtil.Ns + "text"
             , new XAttribute("x", Node.Width / 2 - line.Item2.Width / 2)
             , new XAttribute("y", bottom - 2)
             , new XAttribute("style", $"font-size:{line.Item3}px;font-family:{ReportStyle.Default.FontName}")
@@ -304,7 +304,7 @@ namespace GedcomParser
         }
         if (!string.IsNullOrEmpty(ImagePath))
         {
-          group.Add(new XElement(Svg.Ns + "image"
+          group.Add(new XElement(SvgUtil.Ns + "image"
             , new XAttribute("href", new Uri(ImagePath).ToString())
             , new XAttribute("x", Node.Width / 2 - _imageSize.Width / 2)
             , new XAttribute("y", bottom)

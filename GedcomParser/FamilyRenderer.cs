@@ -26,7 +26,7 @@ namespace GedcomParser
 
     public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
     {
-      var result = new XElement(Svg.Ns + "svg");
+      var result = new XElement(SvgUtil.Ns + "svg");
 
       var nodesById = new Dictionary<string, Node>();
       var graphics = new List<ISvgGraphic>();
@@ -223,14 +223,14 @@ namespace GedcomParser
 
       public override IEnumerable<XElement> ToSvg()
       {
-        var group = new XElement(Svg.Ns + "g"
+        var group = new XElement(SvgUtil.Ns + "g"
             , new XAttribute("transform", $"translate({Left},{Top})")
         );
         var textStart = 0.0;
         if (_imageSize.Width > 0)
         {
           textStart = _imageSize.Width + ImageRightMargin;
-          group.Add(new XElement(Svg.Ns + "image"
+          group.Add(new XElement(SvgUtil.Ns + "image"
             , new XAttribute("href", new Uri(ImagePath).ToString())
             , new XAttribute("x", 0)
             , new XAttribute("y", 0)
@@ -238,12 +238,12 @@ namespace GedcomParser
             , new XAttribute("height", _imageSize.Height)));
         }
 
-        group.Add(new XElement(Svg.Ns + "text"
+        group.Add(new XElement(SvgUtil.Ns + "text"
           , new XAttribute("x", textStart)
           , new XAttribute("y", _line1Height)
           , new XAttribute("style", "font-size:16px;font-family:" + _options.FontName)
           , Name));
-        group.Add(new XElement(Svg.Ns + "text"
+        group.Add(new XElement(SvgUtil.Ns + "text"
           , new XAttribute("x", textStart)
           , new XAttribute("y", _line1Height + ImageRightMargin + _line2Height)
           , new XAttribute("style", "fill:#999;font-size:12px;font-family:" + _options.FontName)
@@ -262,7 +262,7 @@ namespace GedcomParser
 
       public override IEnumerable<XElement> ToSvg()
       {
-        yield return new XElement(Svg.Ns + "ellipse"
+        yield return new XElement(SvgUtil.Ns + "ellipse"
           , new XAttribute("cx", MidX)
           , new XAttribute("cy", MidY)
           , new XAttribute("rx", Width / 2)
