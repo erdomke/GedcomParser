@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Xml.Linq;
 
@@ -59,35 +60,83 @@ namespace GedcomParser
     }
   }
 
-  internal struct Rectangle
+  [DebuggerDisplay("[x={Left},y={Top},w={Width},h={Height}]")]
+  internal struct ScreenRectangle
   {
-    public double Left { get; set; }
-    public double Top { get; set; }
+    public double Left { get; }
+    public double Top { get; }
+    public double MidX => Left + Width / 2;
+    public double MidY => Top + Height / 2;
+    public double Right  => Left + Width;
+    public double Bottom => Top + Height;
+    public double Width { get; }
+    public double Height { get; }
 
-    public double MidX
+    private ScreenRectangle(double left, double top, double width, double height)
     {
-      get => Left + Width / 2;
-      set => Left = value - Width / 2;
+      Left = left;
+      Top = top; 
+      Width = width; 
+      Height = height;
     }
 
-    public double MidY
+    public bool PointInside(double x, double y)
     {
-      get => Top + Height / 2;
-      set => Top = value - Height / 2;
+      return x >= Left && x <= Right
+        && y >= Top && y <= Bottom;
     }
 
-    public double Right 
+    public static ScreenRectangle FromDimensions(double left, double top, double width, double height)
     {
-      get => Left + Width;
-      set => Width = value - Left;
+      return new ScreenRectangle(left, top, width, height);
     }
-    public double Bottom
+
+    public static ScreenRectangle FromSides(double left, double top, double right, double bottom)
     {
-      get => Top + Height;
-      set => Height = value - Top;
+      return new ScreenRectangle(left, top, right - left, bottom - top);
     }
-    public double Width { get; set; }
-    public double Height { get; set; }
+
+    public static ScreenRectangle Union(ScreenRectangle x, ScreenRectangle y)
+    {
+      return FromSides(Math.Min(x.Left, y.Left), Math.Min(x.Top, y.Top), Math.Max(x.Right, y.Right), Math.Max(x.Bottom, y.Bottom));
+    }
+  }
+
+  [DebuggerDisplay("[x={Left},y={Top},w={Width},h={Height}]")]
+  internal struct CartesianRectangle
+  {
+    public double Left { get; }
+    public double Top { get; }
+    public double MidX => Left + Width / 2;
+    public double MidY => Top - Height / 2;
+    public double Right => Left + Width;
+    public double Bottom => Top - Height;
+    public double Width { get; }
+    public double Height { get; }
+
+    private CartesianRectangle(double left, double top, double width, double height)
+    {
+      Left = left;
+      Top = top;
+      Width = width;
+      Height = height;
+    }
+
+    public bool PointInside(double x, double y)
+    {
+      return x >= Left && x <= Right
+        && y <= Top && y >= Bottom;
+    }
+
+    public static CartesianRectangle FromDimensions(double left, double top, double width, double height)
+    {
+      return new CartesianRectangle(left, top, width, height);
+    }
+
+    public static CartesianRectangle FromSides(double left, double top, double right, double bottom)
+    {
+      return new CartesianRectangle(left, top, right - left, top - bottom);
+    }
   }
 
   internal struct Point

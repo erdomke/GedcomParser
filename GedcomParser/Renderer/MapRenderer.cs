@@ -93,7 +93,7 @@ namespace GedcomParser
 
     static MapRenderer()
     {
-      var maps = new[] { "usaMercatorLow.svg" };
+      var maps = new[] { "usa2High.svg" }; //, "india2019High.svg" };
       _maps = maps.Select(m =>
       {
         using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("GedcomParser." + m))
@@ -104,7 +104,7 @@ namespace GedcomParser
 
     public bool TryRender(IEnumerable<ResolvedFamily> families, string baseDirectory, out XElement element)
     {
-      var countryGroups = families
+      var places = families
         .SelectMany(f => f.Events)
         .Where(e => e.Event.Place != null
           && (e.Event.Type == EventType.Birth
@@ -113,54 +113,11 @@ namespace GedcomParser
             || e.Event.Type == EventType.Residence))
         .Select(e => e.Event.Place)
         .Where(p => p != null)
-        .SelectMany(p => p.Names)
-        .Where(n => n.Parts.Any(p => p.Key == "country"))
-        .GroupBy(n => n.Parts.FirstOrDefault(p => p.Key == "country").Value)
         .ToList();
-      if (countryGroups.Count == 1
-        && countryGroups[0].Key == "United States")
-      {
-        using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("GedcomParser.UnitedStatesCountyMap.svg"))
-        {
-          element = XElement.Load(stream);
-          var countyNames = new HashSet<string>(countryGroups[0].Select(n =>
-          {
-            var county = n.Parts.FirstOrDefault(p => p.Key == "county").Value;
-            if (county == null)
-              return null;
-
-            if (county.EndsWith(" County"))
-              county = county.Substring(0, county.Length - 7);
-            var state = n.Parts.FirstOrDefault(p => p.Key == "state").Value;
-            if (!_stateAbbreviations.TryGetValue(state ?? "", out var abbrev))
-              return null;
-            return county.Replace("Saint", "St_").Replace(' ', '_') + "__" + abbrev;
-          })
-            .Where(n => n != null));
-
-          foreach (var county in element.Elements(SvgUtil.Ns + "g")
-            .Where(e => ((string)e.Attribute("id"))?.Length == 2)
-            .Elements(SvgUtil.Ns + "path"))
-          {
-            if (countyNames.Contains((string)county.Attribute("id")))
-            {
-              county.SetAttributeValue("fill", "#666");
-            }
-            else
-            {
-              county.SetAttributeValue("fill", "#fff");
-            }
-          }
-          
-          return true;
-        }
-      }
-      else
-      {
-        element = null;
-        return false;
-      }
-       
+      element = _maps
+        .Select(m => m.TryRenderPlaces(places, out var map) ? map : null)
+        .FirstOrDefault(m => m != null);
+      return element != null;
     }
 
     private class MercatorMap
@@ -168,47 +125,40 @@ namespace GedcomParser
       private static XNamespace amcharts = "http://amcharts.com/ammap";
       private XElement _map;
 
-      public Rectangle Coordinates { get; }
-      public Rectangle ViewPort { get; }
+      public CartesianRectangle Coordinates { get; }
+      public ScreenRectangle ViewPort { get; }
 
       public MercatorMap(XElement map)
       {
         var meta = map.Descendants(amcharts + "ammap").FirstOrDefault();
-        Coordinates = new Rectangle()
-        {
-          Left = (double)meta.Attribute("leftLongitude"),
-          Top = (double)meta.Attribute("topLatitude"),
-          Right = (double)meta.Attribute("rightLongitude"),
-          Bottom = (double)meta.Attribute("bottomLatitude")
-        };
-        var parts = ((string)map.Attribute("viewbox")).Split(' ', ',').Select(v => double.Parse(v.Trim())).ToList();
-        ViewPort = new Rectangle()
-        {
-          Left = parts[0],
-          Top = parts[1],
-          Width = parts[2],
-          Height = parts[3]
-        };
-
+        Coordinates = CartesianRectangle.FromSides(
+          left: (double)meta.Attribute("leftLongitude"),
+          top: (double)meta.Attribute("topLatitude"),
+          right: (double)meta.Attribute("rightLongitude"),
+          bottom: (double)meta.Attribute("bottomLatitude")
+        );
+        var parts = ((string)map.Attribute("viewBox")).Split(' ', ',').Select(v => double.Parse(v.Trim())).ToList();
+        ViewPort = ScreenRectangle.FromDimensions(left: parts[0], top: parts[1], width: parts[2], height: parts[3]);
         _map = map;
       }
 
       public bool TryRenderPlaces(IEnumerable<Place> places, out XElement map)
       {
         var pxPerLong = ViewPort.Width / Coordinates.Width;
-        var pxPerLat = ViewPort.Height / Coordinates.Height;
+        var scale = ViewPort.Width / (Coordinates.Width * Math.PI / 180);
+        double latitudePosition(double latitude) => scale * Math.Log(Math.Tan(Math.PI / 4 + latitude * Math.PI / 360));
+
+        var topRef = latitudePosition(Coordinates.Top);
 
         var matches = places
           .Where(p => p.BoundingBox.Count == 4)
-          .Select(p => new Rectangle()
-          {
-            Left = p.BoundingBox[0],
-            Top = p.BoundingBox[1],
-            Right = p.BoundingBox[2],
-            Bottom = p.BoundingBox[3],
-          })
-          .Where(r => r.MidX >= Coordinates.Left && r.MidX <= Coordinates.Right
-            && r.MidY >= Coordinates.Top && r.MidY <= Coordinates.Bottom)
+          .Select(p => CartesianRectangle.FromSides(
+            left: p.BoundingBox[0],
+            top: p.BoundingBox[1], 
+            right: p.BoundingBox[2],
+            bottom: p.BoundingBox[3]
+          ))
+          .Where(r => Coordinates.PointInside(r.MidX, r.MidY))
           .ToList();
         if (matches.Count < 1)
         {
@@ -217,17 +167,44 @@ namespace GedcomParser
         }
         else
         {
+          var pointBounds = default(ScreenRectangle?);
           map = XElement.Parse(_map.ToString());
           foreach (var bounding in matches)
           {
-            var diameter = Math.Max(10, Math.Max(bounding.Width * pxPerLong, bounding.Height * pxPerLat));
+            var diameter = Math.Max(bounding.Width * pxPerLong, latitudePosition(bounding.Top) - latitudePosition(bounding.Bottom));
+            var opacity = 0.5 * Math.Exp(-1 * diameter / 12) + 0.1;
+            diameter = Math.Max(diameter, 6);
+
+            var markerBounds = ScreenRectangle.FromDimensions(
+              left: (bounding.MidX - Coordinates.Left) * pxPerLong + ViewPort.Left - diameter / 2,
+              top: topRef - latitudePosition(bounding.MidY) + ViewPort.Top - diameter / 2,
+              width: diameter,
+              height: diameter
+            );
+            if (pointBounds.HasValue)
+              pointBounds = ScreenRectangle.Union(markerBounds, pointBounds.Value);
+            else
+              pointBounds = markerBounds;
+
             map.Add(new XElement(SvgUtil.Ns + "circle"
-              , new XAttribute("cx", (bounding.MidX - Coordinates.Left) * pxPerLong)
-              , new XAttribute("cy", (bounding.MidY - Coordinates.Top) * pxPerLat)
-              , new XAttribute("r", diameter / 2)
+              , new XAttribute("cx", markerBounds.MidX)
+              , new XAttribute("cy", markerBounds.MidY)
+              , new XAttribute("r", markerBounds.Width / 2)
               , new XAttribute("fill", "black")
-              , new XAttribute("opacity", "0.1")));
+              , new XAttribute("opacity", opacity.ToString())));
           }
+
+          const double offset = 40;
+          var newViewPort = ScreenRectangle.FromSides(
+            left: Math.Max(pointBounds.Value.Left - offset, ViewPort.Left),
+            top: Math.Max(pointBounds.Value.Top - offset, ViewPort.Top),
+            right: Math.Min(pointBounds.Value.Right + offset, ViewPort.Right),
+            bottom: Math.Min(pointBounds.Value.Bottom + offset, ViewPort.Bottom)
+          );
+
+          //map.SetAttributeValue("viewBox", $"{newViewPort.Left} {newViewPort.Top} {newViewPort.Width} {newViewPort.Height}");
+          //map.SetAttributeValue("width", newViewPort.Width);
+          //map.SetAttributeValue("height", newViewPort.Height);
           return true;
         }
       }
