@@ -16,6 +16,8 @@ namespace GedcomParser.Model
     public string Src { get; set; }
     public string MimeType { get; set; }
     public string Description { get; set; }
+    public double? Width { get; set; }
+    public double? Height { get; set; }
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();

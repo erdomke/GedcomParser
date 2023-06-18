@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Drawing.Imaging;
 using System.Linq;
 using System.Text;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace GedcomParser.Model
 {
@@ -205,16 +208,83 @@ namespace GedcomParser.Model
       builder.Append(Author?.Trim())
         .Append(Title?.Trim())
         .Append(PublicationTitle?.Trim())
-        .Append(Pages?.Trim())
         .Append(DatePublished.ToString("s"))
+        .Append(Publisher?.Id.Primary)
+        .Append(Pages?.Trim())
         .Append(DateAccessed.ToString("s"))
         .Append(RecordNumber?.Trim())
-        .Append(Publisher?.Id.Primary)
         .Append(Repository?.Id.Primary)
         .Append(Src?.ToString())
         .Append(Url?.ToString())
         .Append(Doi?.Trim());
       Utilities.BuildEqualityString(this, builder);
+    }
+
+    public void WriteBibliographyEntry(XmlWriter writer)
+    {
+      if (!string.IsNullOrEmpty(Author))
+        writer.WriteString(Author + ". ");
+      
+      if (!string.IsNullOrEmpty(Title))
+      {
+        if (string.IsNullOrEmpty(PublicationTitle))
+          writer.WriteElementString("em", Title + ". ");
+        else
+          writer.WriteString("\"" + Title + ".\" ");
+      }
+
+      if (!string.IsNullOrEmpty(PublicationTitle))
+        writer.WriteElementString("em", PublicationTitle + ". ");
+
+
+      if (Publisher == null)
+      {
+        if (DatePublished.HasValue)
+          writer.WriteString(DatePublished.ToString("s") + ". ");
+      }
+      else
+      {
+        if (Publisher.Place != null)
+        {
+          var publicationPlace = Publisher.Place.City
+            ?? Publisher.Place.State
+            ?? Publisher.Place.Names.FirstOrDefault()?.Name.Split(',')[0].Trim();
+          if (!string.IsNullOrEmpty(publicationPlace))
+            writer.WriteString(publicationPlace + ": ");
+        }
+        writer.WriteString(Publisher.Name);
+        if (DatePublished.HasValue)
+          writer.WriteString(", " + DatePublished.ToString("s"));
+        writer.WriteString(". ");
+      }
+
+      if (Repository != null)
+        writer.WriteString(Repository.Name + ". ");
+
+      if (DateAccessed.HasValue)
+        writer.WriteString("Accessed " + DateAccessed.ToString("s") + ". ");
+
+      foreach (var attr in Attributes)
+      {
+        writer.WriteString(attr.Key + " " + attr.Value + ". ");
+      }
+
+      if (!string.IsNullOrEmpty(Pages))
+        writer.WriteString(Pages + ". ");
+
+      if (!string.IsNullOrEmpty(RecordNumber))
+        writer.WriteString(RecordNumber + ". ");
+
+      if (!string.IsNullOrEmpty(Doi))
+        writer.WriteString(Doi + ". ");
+
+      if (Url != null)
+      {
+        writer.WriteStartElement("a");
+        writer.WriteAttributeString("href", Url.ToString());
+        writer.WriteString(Url.ToString());
+        writer.WriteEndElement();
+      }
     }
   }
 }

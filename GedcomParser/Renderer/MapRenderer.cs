@@ -1,10 +1,12 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Xml.Linq;
+using YamlDotNet.Core.Tokens;
 
 namespace GedcomParser
 {
@@ -23,7 +25,7 @@ namespace GedcomParser
       .ToList();
     }
 
-    public bool TryRender(IEnumerable<ResolvedFamily> families, string baseDirectory, out XElement element)
+    public bool TryRender(IEnumerable<ResolvedFamily> families, string baseDirectory, out MapFigure figure)
     {
       var places = families
         .SelectMany(f => f.Events)
@@ -37,10 +39,10 @@ namespace GedcomParser
         .Select(e => e.Event.Place)
         .Where(p => p != null)
         .ToList();
-      element = _maps
+      figure = _maps
         .Select(m => m.TryRenderPlaces(places, out var map) ? map : null)
         .FirstOrDefault(m => m != null);
-      return element != null;
+      return figure != null;
     }
 
     private class MercatorMap
@@ -111,7 +113,7 @@ namespace GedcomParser
         return (2 * Math.Atan(Math.Exp(y / scale)) - Math.PI / 2) * 180 / Math.PI;
       }
 
-      public bool TryRenderPlaces(IEnumerable<Place> places, out XElement map)
+      public bool TryRenderPlaces(IEnumerable<Place> places, out MapFigure figure)
       {
         var pxPerLong = ViewPort.Width / Coordinates.Width;
         if (_verticalScale == 0)
@@ -120,24 +122,27 @@ namespace GedcomParser
 
         var matches = places
           .Where(p => p.BoundingBox.Count == 4)
-          .Select(p => CartesianRectangle.FromSides(
-            left: p.BoundingBox[0],
-            top: p.BoundingBox[1], 
-            right: p.BoundingBox[2],
-            bottom: p.BoundingBox[3]
-          ))
-          .Where(r => Coordinates.PointInside(r.MidX, r.MidY))
+          .Select(p => new {
+            Place = p,
+            Box = CartesianRectangle.FromSides(
+              left: p.BoundingBox[0],
+              top: p.BoundingBox[1],
+              right: p.BoundingBox[2],
+              bottom: p.BoundingBox[3]
+            )
+           })
+          .Where(r => Coordinates.PointInside(r.Box.MidX, r.Box.MidY))
           .ToList();
         if (matches.Count < 1)
         {
-          map = null;
+          figure = null;
           return false;
         }
         else
         {
           var pointBounds = default(ScreenRectangle?);
-          map = XElement.Parse(_map.ToString());
-          foreach (var bounding in matches)
+          var map = XElement.Parse(_map.ToString());
+          foreach (var bounding in matches.Select(m => m.Box))
           {
             var diameter = Math.Max(bounding.Width * pxPerLong
               , CartPositionFromLatitudeDegrees(_verticalScale, bounding.Top)
@@ -176,9 +181,61 @@ namespace GedcomParser
           map.SetAttributeValue("width", newViewPort.Width);
           map.SetAttributeValue("height", newViewPort.Height);
           map.SetAttributeValue("style", "max-width:7.5in");
+
+          figure = new MapFigure()
+          {
+            Map = map,
+            Width = newViewPort.Width
+          };
+
+          var subdivisions = new[] { "country", "state", "county" };
+          var path = new List<string>();
+          var subset = matches.Select(m => m.Place);
+          foreach (var subdivision in subdivisions)
+          {
+            var groups = subset
+              .GroupBy(p => p.PlaceNamePart(subdivision) ?? "")
+              .Where(g => !string.IsNullOrEmpty(g.Key))
+              .ToList();
+            if (groups.Count < 1)
+            {
+              if (path.Count > 0)
+                figure.Caption = "Locations in " + string.Join(", ", Enumerable.Reverse(path));
+              break;
+            }
+            else if (groups.Count > 1)
+            {
+              figure.Caption = "Locations in " + EnglishList(groups.Select(g => g.Key).ToList());
+              if (path.Count > 0)
+                figure.Caption += ", " + string.Join(", ", Enumerable.Reverse(path));
+              break;
+            }
+            else
+            {
+              subset = groups[0];
+              path.Add(groups[0].Key);
+            }
+          }
+
+          if (string.IsNullOrEmpty(figure.Caption) && path.Count > 0)
+            figure.Caption = "Locations in " + string.Join(", ", Enumerable.Reverse(path));
+
           return true;
         }
       }
+
+    }
+
+    private static string EnglishList(IReadOnlyList<string> list, string conjunction = "and")
+    {
+      if (list.Count < 1)
+        return string.Empty;
+      else if (list.Count == 1)
+        return list[0];
+      else if (list.Count == 2)
+        return string.Join(" " + conjunction + " ", list);
+      else
+        return string.Join(", ", list.Take(list.Count - 1)) + ", " + conjunction + " " + list.Last();
     }
   }
 }

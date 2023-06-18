@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
@@ -405,11 +406,20 @@ namespace GedcomParser
       else
       {
         var result = factory(id, node, database);
+        AddCommonProperties(result, node, database);
         if (!result.Id.Any())
           result.Id.Add(result.GetPreferredId(database));
-        database.Add(result);
-        AddCommonProperties(result, node, database);
-        return result;
+        if (database.TryGetValue<T>(result.Id.Primary, out var sameId))
+        {
+          if (result.Equals(sameId))
+            return sameId;
+          throw new InvalidOperationException($"Cannot add to {typeof(T).Name} items with the same ID {result.Id.Primary} to the database.");
+        }
+        else
+        {
+          database.Add(result);
+          return result;
+        }
       }
     }
 
@@ -539,6 +549,12 @@ namespace GedcomParser
             break;
           case "place":
             media.Place = Create(null, property.Value as YamlMappingNode, database, Place);
+            break;
+          case "width":
+            media.Width = double.Parse((string)property.Value);
+            break;
+          case "height":
+            media.Height = double.Parse((string)property.Value);
             break;
         }
       }

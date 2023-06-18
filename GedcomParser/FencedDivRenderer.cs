@@ -1,16 +1,19 @@
 ﻿using GedcomParser.Model;
 using GedcomParser.Renderer;
+using Markdig.Extensions.Figures;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 
 namespace GedcomParser
 {
   internal class FencedDivRenderer : HtmlObjectRenderer<FencedDiv>
   {
+    private const double minCaptionWidth = 2.5 * 96;
     private readonly FencedDivExtension _extension;
 
     public FencedDivRenderer(FencedDivExtension extension)
@@ -23,6 +26,18 @@ namespace GedcomParser
       var html = new HtmlTextWriter(renderer.Writer);
 
       var personIndex = new Lookup<Individual, Reference>();
+
+      var citations = _extension.ResolvedFamilies()
+        .SelectMany(f => f.Events)
+        .SelectMany(e => e.Event.Citations)
+        .Distinct()
+        .OrderBy(c =>
+        {
+          var builder = new StringBuilder();
+          c.BuildEqualityString(builder, null);
+          return builder.ToString();
+        }, StringComparer.OrdinalIgnoreCase)
+        .ToList();
 
       var groups = FamilyGroup.Create(_extension.ResolvedFamilies(), obj.Options);
       foreach (var group in groups)
@@ -56,7 +71,11 @@ namespace GedcomParser
 
         var baseDirectory = Path.GetDirectoryName(_extension.Database.BasePath);
 
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "diagrams");
+
         html.WriteStartElement("figure");
+        html.WriteAttributeString("class", "decendants");
         var decendantRenderer = new DecendantLayout()
         {
           Graphics = _extension.Graphics
@@ -64,7 +83,24 @@ namespace GedcomParser
         decendantRenderer.Render(group.Families, baseDirectory).WriteTo(html);
         html.WriteEndElement();
 
+        var mapRenderer = new MapRenderer();
+        if (mapRenderer.TryRender(group.Families, baseDirectory, out var figure))
+        {
+          html.WriteStartElement("figure");
+          html.WriteAttributeString("class", "map");
+          figure.Map.WriteTo(html);
+          if (!string.IsNullOrEmpty(figure.Caption))
+          {
+            html.WriteStartElement("figcaption");
+            html.WriteAttributeString("style", $"max-width:{Math.Max(minCaptionWidth, figure.Width)}px;");
+            html.WriteString(figure.Caption);
+            html.WriteEndElement();
+          }
+          html.WriteEndElement();
+        }
+
         html.WriteStartElement("figure");
+        html.WriteAttributeString("class", "timeline");
         var timelineRenderer = new TimelineRenderer()
         {
           Graphics = _extension.Graphics
@@ -72,13 +108,7 @@ namespace GedcomParser
         timelineRenderer.Render(group.Families, baseDirectory).WriteTo(html);
         html.WriteEndElement();
 
-        var mapRenderer = new MapRenderer();
-        if (mapRenderer.TryRender(group.Families, baseDirectory, out var map))
-        {
-          html.WriteStartElement("figure");
-          map.WriteTo(html);
-          html.WriteEndElement();
-        }
+        html.WriteEndElement();
 
         var events = group.Families.SelectMany(f => f.Events)
           .Where(e => e.Event.Date.HasValue)
@@ -95,15 +125,118 @@ namespace GedcomParser
             html.WriteEndElement();
             html.WriteString(": ");
             resolvedEvent.Description(html);
+
+            var eventCitations = resolvedEvent.Event.Citations
+              .Select(c => new { Id = c.Id.Primary, Index = citations.IndexOf(c) })
+              .Where(c => c.Index >= 0)
+              .GroupBy(c => c.Index)
+              .Select(g => g.First())
+              .OrderBy(c => c.Index)
+              .ToList();
+            if (eventCitations.Count > 0)
+            {
+              html.WriteString(" ");
+              html.WriteStartElement("sup");
+              html.WriteAttributeString("class", "cite");
+              html.WriteString("[");
+              var first = true;
+              foreach (var citation in eventCitations)
+              {
+                if (first)
+                  first = false;
+                else
+                  html.WriteString(", ");
+                html.WriteStartElement("a");
+                html.WriteAttributeString("href", "#" + citation.Id);
+                html.WriteString((citation.Index + 1).ToString());
+                html.WriteEndElement();
+              }
+              html.WriteString("]");
+              html.WriteEndElement();
+            }
+
+            RenderGallery(html, resolvedEvent.Event.Media
+              .Concat(resolvedEvent.Related.SelectMany(m => m.Media)));
+
             html.WriteEndElement();
           }
           html.WriteEndElement();
         }
 
+        RenderGallery(html, group.Families
+          .SelectMany(f => f.Family.Media
+            //.Concat(f.Members.SelectMany(m => m.Individual.Media))
+          ));
+
         _extension.SectionIds.Pop();
         html.WriteEndElement();
       }
 
+      RenderPeopleIndex(html, personIndex);
+
+      RenderSourceList(html, citations);
+    }
+
+    private static HashSet<string> _imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+      ".png", ".gif", ".bmp", ".jpg", ".jpeg"
+    };
+
+    private void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media)
+    {
+      var images = media
+        .Where(m => !string.IsNullOrEmpty(m.Src)
+          && _imageExtensions.Contains(Path.GetExtension(m.Src))
+          && !(m.Attributes.TryGetValue("hidden", out var hidden) && hidden == "true"))
+        .Distinct()
+        .OrderBy(m => m.Date.HasValue ? 0 : 1)
+        .ThenBy(m => m.Date)
+        .ToList();
+      if (images.Count > 0)
+      {
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "gallery");
+        foreach (var image in images)
+        {
+          html.WriteStartElement("figure");
+          html.WriteStartElement("img");
+          html.WriteAttributeString("src", image.Src);
+          html.WriteEndElement();
+
+          if (!string.IsNullOrEmpty(image.Description)
+            || image.Date.HasValue
+            || image.Place != null)
+          {
+            html.WriteStartElement("figcaption");
+            if (image.Width.HasValue)
+            {
+              var width = image.Width.Value * (2 * 96) / image.Height.Value;
+              html.WriteAttributeString("style", $"max-width:{Math.Max(minCaptionWidth, width)}px;");
+            }
+            if (image.Date.HasValue)
+            {
+              html.WriteStartElement("time");
+              html.WriteString(image.Date.ToString("yyyy MMM d"));
+              html.WriteEndElement();
+              html.WriteString(": ");
+            }
+            html.WriteString(image.Description);
+            if (image.Place != null)
+            {
+              html.WriteString(" at " + image.Place.Names.FirstOrDefault()?.Name);
+            }
+            html.WriteString(".");
+            html.WriteEndElement();
+          }
+
+          html.WriteEndElement();
+        }
+        html.WriteEndElement();
+      }
+    }
+
+    private void RenderPeopleIndex(HtmlTextWriter html, ILookup<Individual, Reference> personIndex)
+    {
       html.WriteStartElement("section");
       html.WriteElementString("h2", "Person Index");
       foreach (var person in personIndex
@@ -146,6 +279,25 @@ namespace GedcomParser
         html.WriteEndElement();
       }
       html.WriteEndElement();
+      html.WriteEndElement();
+    }
+
+    private void RenderSourceList(HtmlTextWriter html, IEnumerable<Citation> citations)
+    {
+      html.WriteStartElement("section");
+      html.WriteElementString("h2", "Source List");
+
+      html.WriteStartElement("ol");
+      html.WriteAttributeString("class", "source-list");
+      foreach (var citation in citations)
+      {
+        html.WriteStartElement("li");
+        html.WriteAttributeString("id", citation.Id.Primary);
+        citation.WriteBibliographyEntry(html);
+        html.WriteEndElement();
+      }
+      html.WriteEndElement();
+
       html.WriteEndElement();
     }
 

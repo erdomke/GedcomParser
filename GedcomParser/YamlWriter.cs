@@ -398,6 +398,10 @@ namespace GedcomParser
         mediaNode.Add("mimetype", media.MimeType);
       if (media.Date.HasValue)
         mediaNode.Add("date", media.Date.ToString("s"));
+      if (media.Width.HasValue)
+        mediaNode.Add("width", media.Width.Value.ToString());
+      if (media.Height.HasValue)
+        mediaNode.Add("height", media.Height.ToString());
 
       if (media.Place != null)
       {

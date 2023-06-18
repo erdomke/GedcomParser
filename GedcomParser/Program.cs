@@ -1,6 +1,8 @@
 ﻿using GedcomParser.Model;
 using Markdig;
 using SixLabors.Fonts;
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -14,13 +16,14 @@ namespace GedcomParser
   {
     static void Main(string[] args)
     {
-      RoundTrip(args).Wait();
+      RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);
     }
 
     static void GenerateReport(string[] args)
     {
       var markdown = File.ReadAllText(@"C:\Users\erdomke\source\repos\FamilyTree\Report.md");
+      var graphics = new SixLaborsGraphics();
 
       var db = new Database()
       {
@@ -36,7 +39,7 @@ namespace GedcomParser
         .UseGenericAttributes();
       builder.Extensions.Add(new FencedDivExtension(db)
       {
-        Graphics = new SixLaborsGraphics()
+        Graphics = graphics
       });
 
       var pipeline = builder.Build();
@@ -58,12 +61,44 @@ namespace GedcomParser
     margin-left: 0;
     margin-right: 0;
   }
+  .diagrams {
+    display:flex;
+    flex-wrap: wrap;
+    justify-content:space-between;
+    align-items:center;
+  }
+  figure {
+    text-align: center;
+  }
+  figcaption {
+    font-style: italic;
+  }
   .person-index {
-    display:flex
+    display:flex;
   }
   .person-index .filler {
     flex: 1;
     border-bottom: 1px dotted black;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  sup.cite {
+    color: #999;
+  }
+  .gallery {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    align-items: flex-start;
+  }
+  .gallery img
+  {
+    height: 2in;
   }
   </style>
 </head>
@@ -72,25 +107,52 @@ namespace GedcomParser
 
       var renderer = new AncestorRenderer()
       {
-        Graphics = new SixLaborsGraphics()
+        Graphics = graphics
       };
       var svg = renderer.Render(db, "DomkeEricMatthe19880316");
       svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
     }
 
-    static async Task RoundTrip(string[] args)
+    static async Task RoundTrip(string path)
     {
       var db = new Database();
       var yaml = new YamlStream();
-      using (var reader = new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"))
+      using (var reader = new StreamReader(path))
         yaml.Load(reader);
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
       //db.MakeIdsHumanReadable();
       db.MoveResidenceEventsToFamily();
       db.CombineConsecutiveResidenceEvents();
+      
+      var graphics = new SixLaborsGraphics();
+      var baseDir = Path.GetDirectoryName(path);
+      var imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+      {
+        ".png", ".gif", ".bmp", ".jpg", ".jpeg"
+      };
+      foreach (var media in db.GetValues<IHasMedia>()
+        .SelectMany(m => m.Media)
+        .Concat(db.GetValues<Individual>().Select(i => i.Picture).Where(m => m != null))
+        .Distinct()
+        .Where(m => !string.IsNullOrEmpty(m.Src) 
+          && !m.Width.HasValue
+          && imageExtensions.Contains(Path.GetExtension(m.Src))))
+      {
+        try
+        {
+          using (var stream = File.OpenRead(Path.Combine(baseDir, media.Src)))
+          {
+            var size = graphics.MeasureImage(stream);
+            media.Width = size.Width;
+            media.Height = size.Height;
+          }
+        }
+        catch (Exception) { }
+      }
+
       //await db.GeocodePlaces();
-      new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      new YamlWriter().Write(db, path);
     }
 
     static void Main_Merge(string[] args)

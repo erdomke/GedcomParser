@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
@@ -38,11 +39,63 @@ namespace GedcomParser.Model
       {
         AddNames(html, Primary, true);
         html.WriteString(" died");
+        if (Event.Attributes.TryGetValue("Cause", out var cause))
+        {
+          html.WriteString(" of ");
+          html.WriteString(cause);
+        }
+      }
+      else if (Event.Type == EventType.Degree)
+      {
+        AddNames(html, Primary, true);
+        html.WriteString(" graduated");
+        if (Event.Attributes.TryGetValue("Degree", out var degree))
+        {
+          html.WriteString(" with a ");
+          html.WriteString(degree);
+        }
+      }
+      else if (Event.Type == EventType.Occupation)
+      {
+        AddNames(html, Primary, false);
+        html.WriteString(" worked");
+        if (Event.Attributes.TryGetValue("Occupation", out var occupation))
+        {
+          html.WriteString(" as a ");
+          html.WriteString(occupation);
+
+          var birth = Primary.First().Events.FirstOrDefault(e => e.Type == EventType.Birth && e.Date.HasValue);
+          if (birth != null && Event.Date.HasValue
+            && birth.Date.TryGetDiff(Event.Date, out var minimum, out var maximum))
+          {
+            html.WriteString(" from " + minimum.Years + " years old");
+            if ((Event.Date.Type == DateRangeType.Period || Event.Date.Type == DateRangeType.Range)
+              && maximum.Years > minimum.Years)
+            {
+              html.WriteString(" to " + maximum.Years + " years old");
+            }
+          }
+        }
       }
       else if (Event.Type == EventType.Marriage)
       {
         AddNames(html, Primary, true);
         html.WriteString(" were married");
+      }
+      else if (string.Equals(Event.TypeString, "Diagnosis", StringComparison.OrdinalIgnoreCase))
+      {
+        AddNames(html, Primary, true);
+        html.WriteString(" was diagnosed");
+        if (Event.Attributes.TryGetValue("Diagnosis", out var diagnosis))
+        {
+          html.WriteString(" with ");
+          html.WriteString(diagnosis);
+        }
+      }
+      else if (Event.Type == EventType.Residence)
+      {
+        AddNames(html, Primary, true);
+        html.WriteString(" resided");
       }
       else
       {
@@ -51,12 +104,27 @@ namespace GedcomParser.Model
         AddNames(html, Primary, false);
       }
 
-      if (!string.IsNullOrEmpty(Event.Place?.Names.FirstOrDefault()?.Name))
+      if (!string.IsNullOrEmpty(Event.Organization?.Name))
       {
         html.WriteString(" at ");
-        html.WriteString(Event.Place.Names.First().Name);
+        html.WriteString(Event.Organization.Name);
+      }
+
+      var place = Event.Place ?? Event.Organization?.Place;
+      if (!string.IsNullOrEmpty(place?.Names.FirstOrDefault()?.Name))
+      {
+        html.WriteString(" at ");
+        html.WriteString(place.Names.First().Name);
       }
       html.WriteString(".");
+
+      if (Event.Attributes.TryGetValue("Weight", out var weight))
+      {
+        var pronoun = Primary.Count == 1 ? Primary[0].Pronoun() : "they";
+        html.WriteString(" "
+          + CultureInfo.InvariantCulture.TextInfo.ToTitleCase(pronoun)
+          + " weighed " + weight + ".");
+      }
 
       foreach (var related in Related)
       {
@@ -95,7 +163,12 @@ namespace GedcomParser.Model
           if (birth != null && Event.Date.HasValue
             && birth.Date.TryGetDiff(Event.Date, out var minimum, out var _))
           {
-            html.WriteString(" (" + minimum.Years + " years old)");
+            if (minimum.FullMonths < 1)
+              html.WriteString(" (" + minimum.Days + " days old)");
+            else if (minimum.Years < 2)
+              html.WriteString(" (" + minimum.FullMonths + " months old)");
+            else
+              html.WriteString(" (" + minimum.Years + " years old)");
           }
         }
       }

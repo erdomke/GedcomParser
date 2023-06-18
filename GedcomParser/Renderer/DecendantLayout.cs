@@ -237,13 +237,22 @@ namespace GedcomParser
         if (!string.IsNullOrEmpty(individual.Picture?.Src))
         {
           ImagePath = Path.Combine(baseDirectory, individual.Picture.Src);
-          using (var stream = File.OpenRead(ImagePath))
+          if (individual.Picture.Width.HasValue
+            && individual.Picture.Height.HasValue)
           {
-            var size = graphics.MeasureImage(stream);
-            if (size.Height != MaxImageHeight)
-              _imageSize = new Size(size.Width * MaxImageHeight / size.Height, MaxImageHeight);
-            else
-              _imageSize = size;
+            var size = new Size(individual.Picture.Width.Value, individual.Picture.Height.Value);
+            _imageSize = new Size(size.Width * MaxImageHeight / size.Height, MaxImageHeight);
+          }
+          else
+          {
+            using (var stream = File.OpenRead(ImagePath))
+            {
+              var size = graphics.MeasureImage(stream);
+              if (size.Height != MaxImageHeight)
+                _imageSize = new Size(size.Width * MaxImageHeight / size.Height, MaxImageHeight);
+              else
+                _imageSize = size;
+            }
           }
         }
 
@@ -261,7 +270,7 @@ namespace GedcomParser
         if (individual.BirthDate.HasValue)
           _lines.Add(Measure("B: " + individual.BirthDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
         if (individual.DeathDate.HasValue)
-          _lines.Add(Measure("D: " + individual.BirthDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
+          _lines.Add(Measure("D: " + individual.DeathDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
         else if (individual.Events.Any(e => e.Type == EventType.Death || e.Type == EventType.Burial))
           _lines.Add(Measure("Deceased", graphics, style, style.BaseFontSize - 4));
         Height = _lines.Select(l => l.Item2.Height).Append(_imageSize.Height).Sum();

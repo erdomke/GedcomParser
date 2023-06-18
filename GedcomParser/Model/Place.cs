@@ -20,6 +20,15 @@ namespace GedcomParser.Model
     public List<Media> Media { get; } = new List<Media>();
     public List<Note> Notes { get; } = new List<Note>();
 
+    public string City => PlaceNamePart("city");
+    public string County => PlaceNamePart("county");
+    public string State => PlaceNamePart("state");
+    public string Country => PlaceNamePart("country");
+
+    public string PlaceNamePart(string part) => Names
+      .Select(n => n.Parts.FirstOrDefault(k => k.Key == part).Value)
+      .FirstOrDefault(v => !string.IsNullOrEmpty(v));
+
     public void BuildEqualityString(StringBuilder builder, Database db)
     {
       builder.Append(Latitude?.ToString())
