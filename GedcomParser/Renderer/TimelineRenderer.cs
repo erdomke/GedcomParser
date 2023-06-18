@@ -239,7 +239,7 @@ namespace GedcomParser.Renderer
 
       public IndividualTimeline(Individual individual) 
       {
-        _group = new XElement(SvgUtil.Ns + "g", new XAttribute("id", individual.Id.Primary));
+        _group = new XElement(SvgUtil.Ns + "g", new XAttribute("id", "time-" + individual.Id.Primary));
         Individual = individual;
         var deathFound = individual.Events.Any(e => e.Type == EventType.Death
           || e.Type == EventType.Burial);

@@ -58,6 +58,13 @@ namespace GedcomParser
     margin-left: 0;
     margin-right: 0;
   }
+  .person-index {
+    display:flex
+  }
+  .person-index .filler {
+    flex: 1;
+    border-bottom: 1px dotted black;
+  }
   </style>
 </head>
 <body><main>" + body + "<main></body></html>";

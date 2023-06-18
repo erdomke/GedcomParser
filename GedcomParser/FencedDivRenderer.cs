@@ -2,6 +2,7 @@
 using GedcomParser.Renderer;
 using Markdig.Renderers;
 using Markdig.Renderers.Html;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -21,12 +22,23 @@ namespace GedcomParser
     {
       var html = new HtmlTextWriter(renderer.Writer);
 
+      var personIndex = new Lookup<Individual, Reference>();
+
       var groups = FamilyGroup.Create(_extension.ResolvedFamilies(), obj.Options);
       foreach (var group in groups)
       {
+        var reference = new Reference(group.Families[0].Id.Primary, group.Title);
+        foreach (var individual in group.Families
+          .SelectMany(f => f.Members.Select(m => m.Individual))
+          .Distinct())
+        {
+          personIndex.Add(individual, reference);
+        }
+
         html.WriteStartElement("section");
         html.WriteAttributeString("class", "chapter");
         html.WriteStartElement("h2");
+        _extension.SectionIds.Push(group.Families.Select(f => f.Id.Primary).ToList());
         if (group.Families.Count == 1)
           html.WriteAttributeString("id", group.Families[0].Id.Primary);
         html.WriteString(group.Title);
@@ -81,13 +93,71 @@ namespace GedcomParser
             html.WriteStartElement("time");
             html.WriteString(resolvedEvent.Event.Date.ToString("yyyy MMM d"));
             html.WriteEndElement();
-            html.WriteString(": " + resolvedEvent.Description());
+            html.WriteString(": ");
+            resolvedEvent.Description(html);
             html.WriteEndElement();
           }
           html.WriteEndElement();
         }
 
+        _extension.SectionIds.Pop();
         html.WriteEndElement();
+      }
+
+      html.WriteStartElement("section");
+      html.WriteElementString("h2", "Person Index");
+      foreach (var person in personIndex
+        .OrderBy(p => p.Key.Names.First().Surname ?? p.Key.Name.Surname, StringComparer.OrdinalIgnoreCase)
+        .ThenBy(p => p.Key.Name.Name, StringComparer.OrdinalIgnoreCase))
+      {
+        html.WriteStartElement("div");
+        html.WriteAttributeString("id", person.Key.Id.Primary);
+        html.WriteAttributeString("class", "person-index");
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "person");
+        html.WriteElementString("strong", person.Key.Name.Surname);
+        html.WriteString(", " + person.Key.Name.Remaining);
+        if (person.Key.BirthDate.HasValue || person.Key.DeathDate.HasValue)
+        {
+          html.WriteStartElement("span");
+          html.WriteAttributeString("style", "color:#999;");
+          html.WriteString($" ({person.Key.DateString})");
+          html.WriteEndElement();
+        }
+        html.WriteEndElement();
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "filler");
+        html.WriteEndElement();
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "refs");
+        var first = true;
+        foreach (var reference in person)
+        {
+          if (first)
+            first = false;
+          else
+            html.WriteString(", ");
+          html.WriteStartElement("a");
+          html.WriteAttributeString("href", "#" + reference.Id);
+          html.WriteString(reference.Title);
+          html.WriteEndElement();
+        }
+        html.WriteEndElement();
+        html.WriteEndElement();
+      }
+      html.WriteEndElement();
+      html.WriteEndElement();
+    }
+
+    private class Reference
+    {
+      public string Id { get; }
+      public string Title { get; }
+
+      public Reference(string id, string title)
+      {
+        Id = id;
+        Title = title;
       }
     }
 

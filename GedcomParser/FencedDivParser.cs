@@ -19,6 +19,7 @@ namespace GedcomParser
 
     public Database Database { get; }
     public IGraphics Graphics { get; set; }
+    internal Stack<IEnumerable<string>> SectionIds { get; } = new Stack<IEnumerable<string>>();
 
     public FencedDivExtension(Database database)
     {

@@ -199,7 +199,7 @@ namespace GedcomParser
       foreach (var node in graph.Nodes.Where(n => n.Width < 3))
       {
         result.Add(new XElement(SvgUtil.Ns + "circle"
-          , new XAttribute("id", ((IHasId)node.UserData).Id.Primary)
+          , new XAttribute("id", "tree-" + ((IHasId)node.UserData).Id.Primary)
           , new XAttribute("style", "fill:black")
           , new XAttribute("cx", node.Center.X)
           , new XAttribute("cy", node.Center.Y)
@@ -280,7 +280,7 @@ namespace GedcomParser
       public override IEnumerable<XElement> ToSvg()
       {
         var group = new XElement(SvgUtil.Ns + "g"
-          , new XAttribute("id", Individual.Id.Primary)
+          , new XAttribute("id", "tree-" + Individual.Id.Primary)
           , new XAttribute("transform", $"translate({Node.Center.X - Node.Width / 2},{Node.Center.Y - Node.Height / 2})")
         );
         var bottom = 0.0;

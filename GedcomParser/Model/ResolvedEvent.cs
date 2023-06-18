@@ -22,62 +22,61 @@ namespace GedcomParser.Model
       Event = eventObj;
     }
 
-    public string Description()
+    public void Description(HtmlTextWriter html)
     {
-      var builder = new StringBuilder();
       if (Event.Type == EventType.Birth)
       {
-        builder.Append(string.Join(" and ", Primary.Select(i => i.Name.Name)));
-        builder.Append(" was born");
+        AddNames(html, Primary, false);
+        html.WriteString(" was born");
         if (Secondary.Count > 0)
         {
-          builder.Append(" to ");
-          AddNamesWithAge(builder, Secondary);
+          html.WriteString(" to ");
+          AddNames(html, Secondary, true);
         }
       }
       else if (Event.Type == EventType.Death)
       {
-        AddNamesWithAge(builder, Primary);
-        builder.Append(" died");
+        AddNames(html, Primary, true);
+        html.WriteString(" died");
       }
       else if (Event.Type == EventType.Marriage)
       {
-        AddNamesWithAge(builder, Primary);
-        builder.Append(" were married");
+        AddNames(html, Primary, true);
+        html.WriteString(" were married");
       }
       else
       {
-        builder.Append(Event.TypeString ?? Event.Type.ToString());
-        builder.Append(" of ");
-        builder.Append(string.Join(" and ", Primary.Select(i => i.Name.Name)));
+        html.WriteString(Event.TypeString ?? Event.Type.ToString());
+        html.WriteString(" of ");
+        AddNames(html, Primary, false);
       }
 
       if (!string.IsNullOrEmpty(Event.Place?.Names.FirstOrDefault()?.Name))
-        builder.Append(" at ").Append(Event.Place.Names.First().Name);
-      builder.Append('.');
+      {
+        html.WriteString(" at ");
+        html.WriteString(Event.Place.Names.First().Name);
+      }
+      html.WriteString(".");
 
       foreach (var related in Related)
       {
         if (related.Type == EventType.Burial)
         {
           var pronoun = Primary.Count == 1 ? Primary[0].Pronoun() : "they";
-          builder
-            .Append(' ')
-            .Append(CultureInfo.InvariantCulture.TextInfo.ToTitleCase(pronoun))
-            .Append(pronoun == "they" ? " were " : " was ")
-            .Append("buried");
+          html.WriteString(" "
+            + CultureInfo.InvariantCulture.TextInfo.ToTitleCase(pronoun)
+            + (pronoun == "they" ? " were " : " was ")
+            + "buried");
           if (related.Date.HasValue)
-            builder.Append(" on ").Append(related.Date.ToString("yyyy MMM d"));
+            html.WriteString(" on " + related.Date.ToString("yyyy MMM d"));
           if (!string.IsNullOrEmpty(related.Place?.Names.FirstOrDefault()?.Name))
-            builder.Append(" at ").Append(related.Place.Names.First().Name);
-          builder.Append('.');
+            html.WriteString(" at " + related.Place.Names.First().Name);
+          html.WriteString(".");
         }
       }
-
-      return builder.ToString();
     }
 
-    private void AddNamesWithAge(StringBuilder builder, IEnumerable<Individual> individuals)
+    private void AddNames(HtmlTextWriter html, IEnumerable<Individual> individuals, bool includeAge)
     {
       var first = true;
       foreach (var i in individuals)
@@ -85,13 +84,19 @@ namespace GedcomParser.Model
         if (first)
           first = false;
         else
-          builder.Append(" and ");
-        builder.Append(i.Name.Name.ToString());
-        var birth = i.Events.FirstOrDefault(e => e.Type == EventType.Birth && e.Date.HasValue);
-        if (birth != null && Event.Date.HasValue
-          && birth.Date.TryGetDiff(Event.Date, out var minimum, out var _))
+          html.WriteString(" and ");
+        html.WriteStartElement("a");
+        html.WriteAttributeString("href", "#" + i.Id.Primary);
+        html.WriteString(i.Name.Name.ToString());
+        html.WriteEndElement();
+        if (includeAge)
         {
-          builder.Append(" (").Append(minimum.Years).Append(" years old)");
+          var birth = i.Events.FirstOrDefault(e => e.Type == EventType.Birth && e.Date.HasValue);
+          if (birth != null && Event.Date.HasValue
+            && birth.Date.TryGetDiff(Event.Date, out var minimum, out var _))
+          {
+            html.WriteString(" (" + minimum.Years + " years old)");
+          }
         }
       }
     }
