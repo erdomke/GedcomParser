@@ -128,9 +128,11 @@ namespace GedcomParser
       {
         if (Type == DateRangeType.Period)
         {
-          if (Start.HasValue)
+          if (Start.HasValue && End.HasValue)
             return "FROM " + Start.ToString(format, formatProvider)
                 + " TO " + End.ToString(format, formatProvider);
+          else if (Start.HasValue)
+            return "FROM " + Start.ToString(format, formatProvider);
           else
             return "TO " + End.ToString(format, formatProvider);
         }

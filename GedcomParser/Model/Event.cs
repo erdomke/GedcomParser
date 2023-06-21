@@ -17,6 +17,7 @@ namespace GedcomParser.Model
     public ExtendedDateRange Date { get; set; }
     public Place Place { get; set; }
     public Organization Organization { get; set; }
+    public string Description { get; set; }
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();

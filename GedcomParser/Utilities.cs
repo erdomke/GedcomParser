@@ -74,5 +74,13 @@ namespace GedcomParser
       }
     }
 
+    public static void WriteStartSection(this HtmlTextWriter html, ISection section)
+    {
+      html.WriteStartElement("section");
+      html.WriteStartElement("h2");
+      html.WriteAttributeString("id", section.Id);
+      html.WriteString(section.Title);
+      html.WriteEndElement();
+    }
   }
 }

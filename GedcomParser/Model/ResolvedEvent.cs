@@ -27,17 +27,17 @@ namespace GedcomParser.Model
     {
       if (Event.Type == EventType.Birth)
       {
-        AddNames(html, Primary, false);
+        AddNames(html, Primary, NameForm.All, false);
         html.WriteString(" was born");
         if (Secondary.Count > 0)
         {
           html.WriteString(" to ");
-          AddNames(html, Secondary, true);
+          AddNames(html, Secondary, NameForm.Short, true);
         }
       }
       else if (Event.Type == EventType.Death)
       {
-        AddNames(html, Primary, true);
+        AddNames(html, Primary, NameForm.Full, true);
         html.WriteString(" died");
         if (Event.Attributes.TryGetValue("Cause", out var cause))
         {
@@ -47,7 +47,7 @@ namespace GedcomParser.Model
       }
       else if (Event.Type == EventType.Degree)
       {
-        AddNames(html, Primary, true);
+        AddNames(html, Primary, NameForm.Short, true);
         html.WriteString(" graduated");
         if (Event.Attributes.TryGetValue("Degree", out var degree))
         {
@@ -57,7 +57,7 @@ namespace GedcomParser.Model
       }
       else if (Event.Type == EventType.Occupation)
       {
-        AddNames(html, Primary, false);
+        AddNames(html, Primary, NameForm.Short, false);
         html.WriteString(" worked");
         if (Event.Attributes.TryGetValue("Occupation", out var occupation))
         {
@@ -79,12 +79,12 @@ namespace GedcomParser.Model
       }
       else if (Event.Type == EventType.Marriage)
       {
-        AddNames(html, Primary, true);
+        AddNames(html, Primary, NameForm.Full, true);
         html.WriteString(" were married");
       }
       else if (string.Equals(Event.TypeString, "Diagnosis", StringComparison.OrdinalIgnoreCase))
       {
-        AddNames(html, Primary, true);
+        AddNames(html, Primary, NameForm.Short, true);
         html.WriteString(" was diagnosed");
         if (Event.Attributes.TryGetValue("Diagnosis", out var diagnosis))
         {
@@ -94,14 +94,14 @@ namespace GedcomParser.Model
       }
       else if (Event.Type == EventType.Residence)
       {
-        AddNames(html, Primary, true);
+        AddNames(html, Primary, NameForm.Short, true);
         html.WriteString(" resided");
       }
       else
       {
         html.WriteString(Event.TypeString ?? Event.Type.ToString());
         html.WriteString(" of ");
-        AddNames(html, Primary, false);
+        AddNames(html, Primary, NameForm.Short, false);
       }
 
       if (!string.IsNullOrEmpty(Event.Organization?.Name))
@@ -144,7 +144,7 @@ namespace GedcomParser.Model
       }
     }
 
-    private void AddNames(HtmlTextWriter html, IEnumerable<Individual> individuals, bool includeAge)
+    private void AddNames(HtmlTextWriter html, IEnumerable<Individual> individuals, NameForm nameForm, bool includeAge)
     {
       var first = true;
       foreach (var i in individuals)
@@ -155,7 +155,40 @@ namespace GedcomParser.Model
           html.WriteString(" and ");
         html.WriteStartElement("a");
         html.WriteAttributeString("href", "#" + i.Id.Primary);
-        html.WriteString(i.Name.Name.ToString());
+        if (nameForm == NameForm.Full)
+        {
+          html.WriteString(i.Name.Name);
+        }
+        else if (nameForm == NameForm.Short)
+        {
+          var name = i.Names.OrderBy(n => n.Type == NameType.Birth ? 0 : 1).FirstOrDefault();
+          html.WriteString(name.Nickname ?? name.Name.Remaining ?? name.GivenName);
+        }
+        else // All
+        {
+          html.WriteString(i.Name.Name);
+          var aliases = i.Names.Where(n => n.Type != NameType.Married)
+            .SelectMany(n => new[] { n.Name.Remaining, n.Nickname })
+            .Where(n => !string.IsNullOrEmpty(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+          aliases.Remove(i.Name.Remaining);
+          if (aliases.Count > 0)
+          {
+            html.WriteString(" (");
+            var firstAlias = true;
+            foreach (var alias in aliases)
+            {
+              if (firstAlias)
+                firstAlias = false;
+              else
+                html.WriteString(", ");
+              html.WriteString(alias);
+            }
+            html.WriteString(")");
+          }
+        }
+
         html.WriteEndElement();
         if (includeAge)
         {
@@ -164,14 +197,21 @@ namespace GedcomParser.Model
             && birth.Date.TryGetDiff(Event.Date, out var minimum, out var _))
           {
             if (minimum.FullMonths < 1)
-              html.WriteString(" (" + minimum.Days + " days old)");
+              html.WriteString(" (" + minimum.Days + " days)");
             else if (minimum.Years < 2)
-              html.WriteString(" (" + minimum.FullMonths + " months old)");
+              html.WriteString(" (" + minimum.FullMonths + " months)");
             else
-              html.WriteString(" (" + minimum.Years + " years old)");
+              html.WriteString(" (" + minimum.Years + " years)");
           }
         }
       }
+    }
+
+    private enum NameForm
+    {
+      Full,
+      Short,
+      All
     }
   }
 }

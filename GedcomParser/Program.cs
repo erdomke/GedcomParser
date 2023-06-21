@@ -1,8 +1,8 @@
 ﻿using GedcomParser.Model;
 using Markdig;
-using SixLabors.Fonts;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -16,6 +16,25 @@ namespace GedcomParser
   {
     static void Main(string[] args)
     {
+      /*var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
+      var db = new Database()
+      {
+        BasePath = path
+      };
+      new FamilySearchJsonLoader().Load(db, Path.Combine(Path.GetDirectoryName(path), "FamilySearch.json"));
+      //db.MakeIdsHumanReadable();
+      new YamlWriter().Write(db, path);
+      foreach (var root in new[] { "GKG3-ZSQ", "GSQQ-BFS", "LTGZ-RCB", "27SV-8MM", "LDF1-7FD", "LVWS-GVM", "G9PN-WBQ" })
+      {
+        var renderer = new AncestorRenderer(db, root)
+        {
+          Graphics = new SixLaborsGraphics()
+        };
+        var svg = renderer.Render();
+        svg.Save($@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch_{root}.svg");
+      }
+      return;*/
+
       RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);
     }
@@ -49,26 +68,28 @@ namespace GedcomParser
   <style>
   body {
     font-family: Calibri;
+    font-size: 10pt;
   }
   main {
     max-width: 7.5in;
     margin: 0 auto;
   }
+  section {
+    page-break-inside: avoid;
+    page-break-after: always;
+  }
   time {
     font-weight: bold;
   }
   figure {
-    margin-left: 0;
-    margin-right: 0;
+    margin: 0;
+    text-align: center;
   }
   .diagrams {
     display:flex;
     flex-wrap: wrap;
     justify-content:space-between;
     align-items:center;
-  }
-  figure {
-    text-align: center;
   }
   figcaption {
     font-style: italic;
@@ -90,26 +111,31 @@ namespace GedcomParser
   sup.cite {
     color: #999;
   }
+  .event-descrip {
+    flex:1;
+  }
   .gallery {
     display: flex;
     flex-wrap: wrap;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: flex-start;
+    gap: 0.25in;
+    page-break-inside: avoid;
   }
   .gallery img
   {
-    height: 2in;
+    max-height: 3in;
   }
   </style>
 </head>
 <body><main>" + body + "<main></body></html>";
       File.WriteAllText(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html", html);
 
-      var renderer = new AncestorRenderer()
+      var renderer = new AncestorRenderer(db, "DomkeEricMatthe19880316")
       {
         Graphics = graphics
       };
-      var svg = renderer.Render(db, "DomkeEricMatthe19880316");
+      var svg = renderer.Render();
       svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
     }
 
@@ -134,6 +160,7 @@ namespace GedcomParser
       foreach (var media in db.GetValues<IHasMedia>()
         .SelectMany(m => m.Media)
         .Concat(db.GetValues<Individual>().Select(i => i.Picture).Where(m => m != null))
+        .Concat(db.GetValues<IHasEvents>().SelectMany(e => e.Events).SelectMany(e => e.Media))
         .Distinct()
         .Where(m => !string.IsNullOrEmpty(m.Src) 
           && !m.Width.HasValue
@@ -254,18 +281,5 @@ namespace GedcomParser
     //    html.WriteEndElement();
     //  }
     //}
-
-    static void RenderSvg(string[] args)
-    {
-      var structure = GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged");
-      var db = new Database();
-      new GedcomLoader().Load(db, structure);
-      var renderer = new AncestorRenderer()
-      {
-        Graphics = new SixLaborsGraphics()
-      };
-      var svg = renderer.Render(db, "I322438959843");
-      svg.Save(@"C:\Users\erdomke\source\GitHub\GedcomParser\Test3.svg");
-    }
   }
 }

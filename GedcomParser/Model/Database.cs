@@ -243,6 +243,8 @@ namespace GedcomParser.Model
         foreach (var obj in group)
         {
           var newId = group.Key + (addIndex ? "_" + obj.Checksum(this).Substring(0, 5) : "");
+          if (_nodes.ContainsKey(newId))
+            newId = group.Key + "_" + obj.Checksum(this).Substring(0, 6);
           if (obj.Id.Add(newId, true))
             _nodes.Add(newId, obj);
         }

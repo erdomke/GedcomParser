@@ -130,17 +130,21 @@ namespace GedcomParser
         node.Add("pages", citation.Pages);
       if (citation.Publisher != null)
       {
-        node.Add("publisher", new YamlMappingNode()
+        var publisher = new YamlMappingNode()
         {
-          { "$ref", "#/organizations/" + citation.Publisher.Id.Primary }
-        });
+          Style = MappingStyle.Flow
+        };
+        publisher.Add("$ref", "#/organizations/" + citation.Publisher.Id.Primary);
+        node.Add("publisher", publisher);
       }
       if (citation.Repository != null)
       {
-        node.Add("repository", new YamlMappingNode()
+        var respository = new YamlMappingNode()
         {
-          { "$ref", "#/organizations/" + citation.Repository.Id.Primary }
-        });
+          Style = MappingStyle.Flow
+        };
+        respository.Add("$ref", "#/organizations/" + citation.Repository.Id.Primary);
+        node.Add("repository", respository);
       }
       if (citation.DateAccessed.HasValue)
         node.Add("date_accessed", citation.DateAccessed.ToString("s"));
@@ -160,7 +164,8 @@ namespace GedcomParser
     {
       if (name.Translations.Count < 1
         && (string.IsNullOrEmpty(name.Surname) || name.Name.Surname == name.Surname)
-        && (string.IsNullOrEmpty(name.GivenName) || name.Name.Remaining == name.GivenName))
+        && (string.IsNullOrEmpty(name.GivenName) || name.Name.Remaining == name.GivenName)
+        && string.IsNullOrEmpty(name.Nickname))
       {
         if (name.Type == NameType.Birth
           && name.Citations.Count < 1
@@ -242,6 +247,9 @@ namespace GedcomParser
           { "$ref", "#/organizations/" + eventObj.Organization.Id.Primary }
         });
       }
+
+      if (!string.IsNullOrEmpty(eventObj.Description))
+        node.Add("description", eventObj.Description);
 
       AddCommonProperties(node, eventObj);
       

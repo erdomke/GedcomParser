@@ -7,6 +7,10 @@ namespace GedcomParser
 {
   public class ReportOptions
   {
+    public int AncestorDepth { get; set; }
+
+    public List<string> AncestorPeople { get; } = new List<string>();
+
     public List<FamilyGroup> Groups { get; } = new List<FamilyGroup>();
 
     public static ReportOptions Parse(string yamlOptions)
@@ -15,14 +19,26 @@ namespace GedcomParser
       var yaml = new YamlStream();
       using (var reader = new StringReader(yamlOptions))
         yaml.Load(reader);
-      foreach (var group in yaml.Documents[0].RootNode.Item("groups")
-        .EnumerateArray())
+
+      foreach (var property in yaml.Documents[0].RootNode.EnumerateObject())
       {
-        result.Groups.Add(new FamilyGroup()
+        switch (((string)property.Key).ToLowerInvariant())
         {
-          Title = (string)group.Item("title"),
-          Ids = group.Item("families").EnumerateArray().Select(e => (string)e).ToList()
-        });
+          case "ancestor-chart":
+            result.AncestorDepth = int.Parse((string)property.Value.Item("depth"));
+            result.AncestorPeople.AddRange(property.Value.Item("people").EnumerateArray().Select(n => (string)n));
+            break;
+          case "groups":
+            foreach (var group in property.Value.EnumerateArray())
+            {
+              result.Groups.Add(new FamilyGroup()
+              {
+                Title = (string)group.Item("title"),
+                Ids = group.Item("families").EnumerateArray().Select(e => (string)e).ToList()
+              });
+            }
+            break;
+        }
       }
       return result;
     }

@@ -6,40 +6,62 @@ using System.Xml.Linq;
 
 namespace GedcomParser
 {
-  internal class AncestorRenderer
+  internal class AncestorRenderer : ISection
   {
+    private Database _database;
+    private string _root;
+    private int _depth;
+
     private static XNamespace svgNs = (XNamespace)"http://www.w3.org/2000/svg";
-    private const int nodeHeight = 36;
-    private const int nodeWidth = 300;
     private const int colSpacing = 40;
     private const int horizPadding = 2;
 
     public IGraphics Graphics { get; set; }
 
-    public XElement Render(Database database, string root)
+    public string Title { get; }
+
+    public string Id { get; }
+
+    public Individual Individual { get; }
+
+    public AncestorRenderer(Database database, string root, int depth = int.MaxValue)
+    {
+      _database = database;
+      _root = root;
+      Individual = database.GetValue<Individual>(root);
+      Id = "ancestors-" + root;
+      Title = "Ancestors of " + Individual.Name.Name;
+      _depth = depth < 1 ? int.MaxValue : depth;
+    }
+
+    public XElement Render()
     {
       var nodes = new List<Node>
       {
           new Node()
           {
-              Id = root,
+              Id = _root,
               Column = 0
-          }.UpdateText(database, Graphics)
+          }.UpdateText(_database, Graphics)
       };
+
       for (var idx = 0; idx < nodes.Count; idx++)
       {
-        foreach (var parent in database
-            .IndividualLinks(nodes[idx].Id, FamilyLinkType.Birth, FamilyLinkType.Parent))
+        if ((nodes[idx].Column + 1) < _depth)
         {
-          var newNode = new Node()
+          foreach (var parent in _database
+              .IndividualLinks(nodes[idx].Id, FamilyLinkType.Birth, FamilyLinkType.Parent))
           {
-            Id = parent.Individual2,
-            Type = parent.LinkType2,
-            Child = nodes[idx],
-            Column = nodes[idx].Column + 1
-          }.UpdateText(database, Graphics);
-          nodes[idx].Parents.Add(newNode);
-          nodes.Add(newNode);
+            var newNode = new Node()
+            {
+              Id = parent.Individual2,
+              Type = parent.LinkType2,
+              Child = nodes[idx],
+              Column = nodes[idx].Column + 1
+            }.UpdateText(_database, Graphics);
+            nodes[idx].Parents.Add(newNode);
+            nodes.Add(newNode);
+          }
         }
       }
 
@@ -149,6 +171,8 @@ namespace GedcomParser
       var height = nodes.Max(n => n.Bottom);
       var width = nodes.Max(n => n.Right);
       result.SetAttributeValue("viewBox", $"0 0 {width} {height}");
+      result.SetAttributeValue("width", width);
+      result.SetAttributeValue("height", height);
       foreach (var node in nodes)
         foreach (var part in node.ToSvg())
           result.Add(part);
@@ -163,6 +187,15 @@ namespace GedcomParser
         foreach (var parent in ParentTree(node.Parents))
           yield return parent;
       }
+    }
+
+    public void Render(HtmlTextWriter html, FencedDivExtension extension)
+    {
+      html.WriteStartSection(this);
+      var svg = Render();
+      svg.SetAttributeValue("style", "max-width:7.5in;max-height:9.3in");
+      svg.WriteTo(html);
+      html.WriteEndElement();
     }
 
     private class Node : Shape
@@ -196,17 +229,18 @@ namespace GedcomParser
       {
         var style = ReportStyle.Default;
         yield return new XElement(svgNs + "g"
-            , new XAttribute("transform", $"translate({Left},{Top})")
-            , new XElement(svgNs + "text"
-                , new XAttribute("x", 0)
-                , new XAttribute("y", 18)
-                , new XAttribute("style", $"font-size:{style.BaseFontSize}px;font-family:{style.FontName}")
-                , Name)
-            , new XElement(svgNs + "text"
-                , new XAttribute("x", 0)
-                , new XAttribute("y", Height - 4)
-                , new XAttribute("style", $"fill:#999;font-size:{style.BaseFontSize - 4}px;font-family:{style.FontName}")
-                , Dates)
+          , new XAttribute("id", $"ans-{Id}")
+          , new XAttribute("transform", $"translate({Left},{Top})")
+          , new XElement(svgNs + "text"
+            , new XAttribute("x", 0)
+            , new XAttribute("y", 18)
+            , new XAttribute("style", $"font-size:{style.BaseFontSize}px;font-family:{style.FontName}")
+            , Name)
+          , new XElement(svgNs + "text"
+            , new XAttribute("x", 0)
+            , new XAttribute("y", Height - 4)
+            , new XAttribute("style", $"fill:#999;font-size:{style.BaseFontSize - 4}px;font-family:{style.FontName}")
+            , Dates)
         );
         var lineStyle = "stroke:black;stroke-width:1px;fill:none";
         foreach (var parent in Parents)
@@ -214,21 +248,21 @@ namespace GedcomParser
           if (Math.Abs(parent.Top - Top) < 0.001)
           {
             yield return new XElement(svgNs + "path"
-                , new XAttribute("style", lineStyle)
-                , new XAttribute("d", $"M {Right + horizPadding} {MidY} L {parent.Left - horizPadding} {MidY}"));
+              , new XAttribute("style", lineStyle)
+              , new XAttribute("d", $"M {Right + horizPadding} {MidY} L {parent.Left - horizPadding} {MidY}"));
           }
           else if (parent.Left > (Left + Width + 0.1))
           {
             var halfway = parent.Left - colSpacing / 2;
             yield return new XElement(svgNs + "path"
-                , new XAttribute("style", lineStyle)
-                , new XAttribute("d", $"M {Right + horizPadding} {MidY} L {halfway} {MidY} L {halfway} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
+              , new XAttribute("style", lineStyle)
+              , new XAttribute("d", $"M {Right + horizPadding} {MidY} L {halfway} {MidY} L {halfway} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
           }
           else
           {
             yield return new XElement(svgNs + "path"
-                , new XAttribute("style", lineStyle)
-                , new XAttribute("d", $"M {Left + colSpacing / 2} {(parent.Top < Top ? Top : Bottom)} L {Left + colSpacing / 2} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
+              , new XAttribute("style", lineStyle)
+              , new XAttribute("d", $"M {Left + colSpacing / 2} {(parent.Top < Top ? Top : Bottom)} L {Left + colSpacing / 2} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
 
           }
         }

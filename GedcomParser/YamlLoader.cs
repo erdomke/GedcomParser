@@ -178,6 +178,9 @@ namespace GedcomParser
           case "date":
             eventObj.Date = ExtendedDateRange.Parse((string)property.Value);
             break;
+          case "description":
+            eventObj.Description = (string)property.Value;
+            break;
           case "place":
             eventObj.Place = Create(null, property.Value as YamlMappingNode, database, Place);
             break;
