@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using YamlDotNet.RepresentationModel;
 
@@ -33,6 +30,27 @@ namespace GedcomParser.Model
 
     public void RemoveUnused()
     {
+      var individualsToRemove = Individuals()
+        .Where(i => !i.Id.SelectMany(i => _relationships[i]).Any())
+        .ToList();
+      foreach (var individual in individualsToRemove)
+        Remove(individual);
+
+      var familiesWithOneMember = Families()
+        .Where(f => f.Id.SelectMany(i => _relationships[i]).Select(l => l.Individual).Distinct().Count() <= 1)
+        .ToList();
+      foreach(var family in familiesWithOneMember)
+      {
+        foreach (var id in family.Id)
+        {
+          var rels = _relationships[id].ToList();
+          foreach (var rel in rels)
+            _relationships.Remove(rel.Individual, rel);
+          _relationships.Remove(id);
+          _nodes.Remove(id);
+        }
+      }
+
       var itemsToRemove = Places().Where(p => !WhereUsed(p).Any())
         .OfType<IHasId>()
         .Concat(Organizations().Where(p => !WhereUsed(p).Any()))
@@ -127,7 +145,9 @@ namespace GedcomParser.Model
           return p.Names.FirstOrDefault()?.Name.Trim() ?? Guid.NewGuid().ToString("N");
       }))
       {
-        var ordered = group.OrderBy(p => p.Id.Primary).ToList();
+        var ordered = group
+          .OrderBy(p => long.TryParse(p.Id.Primary, out var lng) ? lng.ToString("D10") : p.Id.Primary)
+          .ToList();
         foreach (var place in ordered.Skip(1))
           place.DuplicateOf = ordered[0].Id.Primary;
       }
@@ -163,6 +183,66 @@ namespace GedcomParser.Model
           }
         }
       }
+    }
+
+    public void RemoveNameOnlyIndividuals()
+    {
+      while (true)
+      {
+        var nameOnlyLeaves = _nodes.Values.OfType<Individual>()
+          .Where(i => i.Attributes.Count < 1
+            && i.Citations.Count < 1
+            //&& i.Links.Count < 1
+            && i.Media.Count < 1
+            && i.Notes.Count < 1
+            && i.Picture == null
+            && !i.Events.Any(e => e.Attributes.Count > 0
+              || e.Citations.Count > 0
+              || e.Date.HasValue
+              || !string.IsNullOrEmpty(e.Description)
+              || e.Links.Count > 0
+              || e.Media.Count > 0
+              || e.Notes.Count > 0
+              || e.Organization != null
+              || e.Place != null)
+            && !i.Id.SelectMany(i => _relationships[i]).Any(l => l.Type.HasFlag(FamilyLinkType.Child)))
+          .ToList();
+        if (nameOnlyLeaves.Count < 1)
+          break;
+
+        var familyParentsRemoved = new HashSet<string>();
+
+        foreach (var individual in nameOnlyLeaves)
+          familyParentsRemoved.UnionWith(Remove(individual));
+        
+        var danglingChildren = familyParentsRemoved
+          .Where(f => _relationships[f].All(l => l.Type.HasFlag(FamilyLinkType.Child)))
+          .SelectMany(f => _relationships[f]
+            .Select(l => _nodes[l.Individual])
+            .OfType<Individual>()
+            .Where(i => i.Id.SelectMany(id => _relationships[id]).All(l => l.Family == f))
+          )
+          .ToList();
+        foreach (var individual in danglingChildren)
+          familyParentsRemoved.UnionWith(Remove(individual));
+      }
+    }
+
+    public IEnumerable<string> Remove(Individual individual)
+    {
+      var familyIds = new List<string>();
+      foreach (var id in individual.Id)
+      {
+        var rels = _relationships[id].ToList();
+        foreach (var rel in rels)
+        {
+          _relationships.Remove(rel.Family, rel);
+          familyIds.Add(rel.Family);
+        }
+        _relationships.Remove(id);
+        _nodes.Remove(id);
+      }
+      return familyIds;
     }
 
     public void CombineConsecutiveResidenceEvents()

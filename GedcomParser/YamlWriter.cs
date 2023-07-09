@@ -33,12 +33,19 @@ namespace GedcomParser
     {
       var result = new YamlMappingNode();
       foreach (var obj in objects
-        .OrderBy(o => o.DuplicateOf ?? o.Id.Primary, StringComparer.OrdinalIgnoreCase)
-        .ThenBy(o => o.Id.Primary, StringComparer.OrdinalIgnoreCase))
+        .OrderBy(o => GetSortKey(o.DuplicateOf ?? o.Id.Primary), StringComparer.OrdinalIgnoreCase)
+        .ThenBy(o => GetSortKey(o.Id.Primary), StringComparer.OrdinalIgnoreCase))
       {
         result.Add(obj.Id.Primary, visit(obj));
       }
       return result;
+    }
+
+    private string GetSortKey(string value)
+    {
+      if (long.TryParse(value, out var lng))
+        return lng.ToString("D10");
+      return value;
     }
 
     private YamlMappingNode Visit(Individual individual)

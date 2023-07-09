@@ -14,17 +14,21 @@ namespace GedcomParser
 {
   class Program
   {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
-      /*var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
+      var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
       var db = new Database()
       {
         BasePath = path
       };
       new FamilySearchJsonLoader().Load(db, Path.Combine(Path.GetDirectoryName(path), "FamilySearch.json"));
+      db.RemoveNameOnlyIndividuals();
+      db.RemoveUnused();
       //db.MakeIdsHumanReadable();
+      db.MarkDuplicates();
+      //await db.GeocodePlaces();
       new YamlWriter().Write(db, path);
-      foreach (var root in new[] { "GKG3-ZSQ", "GSQQ-BFS", "LTGZ-RCB", "27SV-8MM", "LDF1-7FD", "LVWS-GVM", "G9PN-WBQ" })
+      foreach (var root in new[] { "GKG3-ZSQ", "GSQQ-BFS", "LTGZ-RCB", "27SV-8MM", "LV44-WQL", "G9PN-WBQ" })
       {
         var renderer = new AncestorRenderer(db, root)
         {
@@ -33,7 +37,7 @@ namespace GedcomParser
         var svg = renderer.Render();
         svg.Save($@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch_{root}.svg");
       }
-      return;*/
+      return;
 
       RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);

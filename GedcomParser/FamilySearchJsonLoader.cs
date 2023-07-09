@@ -1,6 +1,7 @@
 ﻿using GedcomParser.Model;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -90,7 +91,10 @@ namespace GedcomParser
       {
         Url = new Uri("https://www.familysearch.org/tree/person/details/" + id)
       });
-      var nameString = element.GetProperty("name").GetString();
+      var primaryName = new IndividualName()
+      {
+        Name = new PersonName(element.GetProperty("name").GetString())
+      };
       foreach (var property in element.EnumerateObject())
       {
         switch (property.Name)
@@ -103,19 +107,41 @@ namespace GedcomParser
           case "gender":
             individual.Sex = Enum.Parse<Sex>(property.Value.GetString(), true);
             break;
-          case "nameConclusion":
-            if (property.Value.GetProperty("details").TryGetProperty("nameForms", out var nameForms))
+          case "lifeSketch":
+            var sketchMedia = new Media();
+            sketchMedia.Notes.Add(new Note()
             {
-              var surname = nameForms.EnumerateArray().First().GetProperty("familyPart").GetString();
-              if (!string.IsNullOrEmpty(surname))
-                nameString = nameString.Replace(surname, "/" + surname + "/");
-            }
+              Text = property.Value.GetProperty("details").GetProperty("text").GetString()
+            });
+            individual.Media.Add(sketchMedia);
+            break;
+          case "nameConclusion":
+            primaryName = CreateName(property.Value);
             break;
           case "otherConclusions":
-            foreach (var conclusion in property.Value.EnumerateArray()
-              .Where(c => c.GetProperty("details").GetProperty("detailsType").GetString() == "EventDetails"))
+            foreach (var conclusion in property.Value.EnumerateArray())
             {
-              individual.Events.Add(CreateEvent(database, conclusion));
+              switch (conclusion.GetProperty("details").GetProperty("detailsType").GetString())
+              {
+                case "EventDetails":
+                  individual.Events.Add(CreateEvent(database, conclusion));
+                  break;
+                case "NameDetails":
+                  var newName = CreateName(conclusion);
+                  if (newName.Name.Name != primaryName.Name.Name
+                    && !primaryName.Name.Name.Contains(newName.Name.Name, StringComparison.InvariantCultureIgnoreCase))
+                    individual.Names.Add(newName);
+                  break;
+              }
+            }
+            break;
+          case "portraitUrl":
+            if (!string.IsNullOrEmpty(property.Value.GetString()))
+            {
+              individual.Media.Add(new Media()
+              {
+                Src = property.Value.GetString()
+              });
             }
             break;
         }
@@ -156,18 +182,54 @@ namespace GedcomParser
         }
       }
 
-      individual.Names.Add(new IndividualName()
-      {
-        Name = new PersonName(nameString)
-      });
+      individual.Names.Insert(0, primaryName);
       return individual;
+    }
+
+    private IndividualName CreateName(JsonElement element)
+    {
+      var nameString = element.GetProperty("details").GetProperty("fullText").GetString();
+      var name = new IndividualName();
+      if (element.GetProperty("details").TryGetProperty("nameForms", out var nameForms))
+      {
+        foreach (var property in nameForms.EnumerateArray().First().EnumerateObject())
+        {
+          switch (property.Name)
+          {
+            case "familyPart":
+              var surname = property.Value.GetString();
+              if (!string.IsNullOrEmpty(surname))
+              {
+                nameString = nameString.Replace(surname, "/" + surname + "/");
+                name.Surname = surname;
+              }
+              break;
+            case "givenPart":
+              name.GivenName = property.Value.GetString();
+              break;
+            case "prefixPart":
+              name.NamePrefix = property.Value.GetString();
+              break;
+            case "suffixPart":
+              name.NameSuffix = property.Value.GetString();
+              break;
+          }
+        }
+      }
+      if (Enum.TryParse<NameType>(element.GetProperty("details").GetProperty("nameType").GetString(), true, out var type))
+        name.Type = type;
+      name.Name = new PersonName(nameString);
+      return name;
     }
 
     private Event CreateEvent(Database database, JsonElement element)
     {
       var details = element.GetProperty("details");
       var eventObj = new Event();
-      if (Enum.TryParse<EventType>(details.GetProperty("type").GetString()?.Replace("_", "") ?? "", true, out var eventType))
+      var type = details.GetProperty("type").GetString()?.Replace("_", "");
+      if (type == "OTHEREVENT")
+        type = details.GetProperty("title").GetString();
+      if (Enum.TryParse<EventType>(type ?? "", true, out var eventType))
       {
         eventObj.Type = eventType;
       }
@@ -194,6 +256,15 @@ namespace GedcomParser
               break;
           }
         }
+      }
+
+      if (element.TryGetProperty("justification", out var justification)
+        && !string.IsNullOrEmpty(justification.GetString()))
+      {
+        if (Uri.TryCreate(justification.GetString(), UriKind.Absolute, out var uri))
+          eventObj.Links.Add(new Link() { Url = uri });
+        else
+          eventObj.Notes.Add(new Note() { Text = justification.GetString() });
       }
       return eventObj;
     }

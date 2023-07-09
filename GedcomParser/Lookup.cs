@@ -23,9 +23,26 @@ namespace GedcomParser
       group.Add(element);
     }
 
+    public void Clear() 
+    { 
+      _groups.Clear();
+    }
+
     public bool Contains(TKey key)
     {
       return _groups.ContainsKey(key);
+    }
+
+    public bool Remove(TKey key)
+    {
+      return _groups.Remove(key);
+    }
+
+    public bool Remove(TKey key, TElement element)
+    {
+      if (!_groups.TryGetValue(key, out var group))
+        return false;
+      return group.Remove(element);
     }
 
     public IEnumerator<IGrouping<TKey, TElement>> GetEnumerator()
