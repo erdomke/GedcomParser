@@ -16,7 +16,7 @@ namespace GedcomParser
   {
     static async Task Main(string[] args)
     {
-      var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
+      /*var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
       var db = new Database()
       {
         BasePath = path
@@ -37,7 +37,7 @@ namespace GedcomParser
         var svg = renderer.Render();
         svg.Save($@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch_{root}.svg");
       }
-      return;
+      return;*/
 
       RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);

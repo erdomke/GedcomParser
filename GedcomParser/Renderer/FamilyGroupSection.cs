@@ -115,7 +115,33 @@ namespace GedcomParser
 
       html.WriteEndElement();
 
-      var events = Families.SelectMany(f => f.Events)
+      foreach (var family in Families)
+      {
+        html.WriteStartElement("p");  
+        var firstEvent = true;
+
+        var allEvents = ResolvedEventGroup.Group(family.Events
+          .Where(e => e.Event.Date.HasValue
+            && e.Event.TypeString != "Arrival"
+            && e.Event.TypeString != "Departure"
+            && !(e.Event.Type == EventType.Residence && e.Event.Place == null))
+          .OrderBy(e => e.Event.Date));
+
+        foreach (var ev in allEvents)
+        {
+          if (firstEvent)
+            firstEvent = false;
+          else
+            html.WriteString(" ");
+          ev.Description(html, _sourceList, true);
+        }
+        html.WriteEndElement();
+
+        RenderGallery(html, family.Family.Media
+          .Concat(family.Events.SelectMany(e => e.Event.Media)), true);
+      }
+
+      /*var events = Families.SelectMany(f => f.Events)
         .Where(e => e.Event.Date.HasValue)
         .OrderBy(e => e.Event.Date)
         .ToList();
@@ -173,12 +199,7 @@ namespace GedcomParser
           html.WriteEndElement();
         }
         html.WriteEndElement();
-      }
-
-      RenderGallery(html, Families
-        .SelectMany(f => f.Family.Media
-        //.Concat(f.Members.SelectMany(m => m.Individual.Media))
-        ), true);
+      } */
 
       html.WriteEndElement();
     }

@@ -33,8 +33,11 @@ namespace GedcomParser
 
     public bool InRange(ExtendedDateRange range)
     {
-      return (!Start.HasValue || range.Start >= Start)
-        && (!End.HasValue || range.End <= End);
+      if (Start.HasValue && (range.Start.HasValue ? range.Start : range.End) < Start)
+        return false;
+      else if (End.HasValue && (range.End.HasValue ? range.End : range.Start) > End)
+        return false;
+      return true;
     }
 
     public bool TryGetRange(out DateTime? start, out DateTime? end)

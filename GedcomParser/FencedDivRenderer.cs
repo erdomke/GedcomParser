@@ -1,8 +1,6 @@
-﻿using GedcomParser.Model;
-using Markdig.Renderers;
+﻿using Markdig.Renderers;
 using Markdig.Renderers.Html;
 using System.Linq;
-using static System.Collections.Specialized.BitVector32;
 
 namespace GedcomParser
 {
