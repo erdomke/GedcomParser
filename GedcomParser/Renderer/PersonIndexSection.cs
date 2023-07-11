@@ -17,7 +17,7 @@ namespace GedcomParser
       _personIndex.Add(person, section);
     }
 
-    public void Render(HtmlTextWriter html, FencedDivExtension extension)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
       html.WriteStartSection(this);
 

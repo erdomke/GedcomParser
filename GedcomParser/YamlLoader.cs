@@ -21,14 +21,33 @@ namespace GedcomParser
       {
         foreach (var group in doc.Children)
         {
-          if (group.Value is YamlMappingNode idGroup)
+          if ((string)group.Key == "roots")
           {
-            foreach (var id in idGroup)
+            database.Roots.AddRange(group.Value.EnumerateArray().Select(n => (string)n));
+          }
+          else if ((string)group.Key == "groups")
+          {
+            foreach (var familyGroup in group.Value.EnumerateArray())
             {
-              var key = $"#/{(string)group.Key}/{(string)id.Key}";
-              toProcess[key] = (YamlMappingNode)id.Value;
-              if (doc == root)
-                keysToProcess.Add(key);
+              database.Groups.Add(new FamilyGroup()
+              {
+                Title = familyGroup.Item("title").String(),
+                Description = familyGroup.Item("description").String(),
+                Ids = familyGroup.Item("families").EnumerateArray().Select(e => (string)e).ToList()
+              });
+            }
+          }
+          else
+          {
+            if (group.Value is YamlMappingNode idGroup)
+            {
+              foreach (var id in idGroup)
+              {
+                var key = $"#/{(string)group.Key}/{(string)id.Key}";
+                toProcess[key] = (YamlMappingNode)id.Value;
+                if (doc == root)
+                  keysToProcess.Add(key);
+              }
             }
           }
         }
@@ -549,6 +568,9 @@ namespace GedcomParser
             break;
           case "date":
             media.Date = ExtendedDateRange.Parse((string)property.Value);
+            break;
+          case "topic_date":
+            media.TopicDate = ExtendedDateRange.Parse((string)property.Value);
             break;
           case "place":
             media.Place = Create(null, property.Value as YamlMappingNode, database, Place);

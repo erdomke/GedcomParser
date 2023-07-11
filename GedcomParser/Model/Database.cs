@@ -14,6 +14,10 @@ namespace GedcomParser.Model
     private Lookup<string, FamilyLink> _relationships = new Lookup<string, FamilyLink>();
     private Lookup<IHasId, object> _whereUsed = new Lookup<IHasId, object>();
 
+    public List<string> Roots { get; } = new List<string>();
+
+    public List<FamilyGroup> Groups { get; } = new List<FamilyGroup>();
+
     public string BasePath { get; set; }
 
     public void Add(IHasId primaryObject)

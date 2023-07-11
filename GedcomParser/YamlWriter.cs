@@ -18,14 +18,36 @@ namespace GedcomParser
 
     public YamlDocument Write(Database db)
     {
-      var root = new YamlMappingNode()
+      var root = new YamlMappingNode();
+      var rootPeople = db.Roots
+        .Select(r => db.TryGetValue(r, out Individual individual) ? individual.Id.Primary : null)
+        .Where(r => !string.IsNullOrEmpty(r))
+        .ToList();
+      if (rootPeople.Count > 0)
+        root.Add("roots", new YamlSequenceNode(rootPeople.Select(r => new YamlScalarNode(r))));
+      if (db.Groups.Count > 0)
       {
-        { "people", BuildListingById(db.Individuals(), Visit, "people") },
-        { "families", BuildListingById(db.Families(), f => Visit(f, db), "families") },
-        { "organizations", BuildListingById(db.Organizations(), Visit, "organizations") },
-        { "places", BuildListingById(db.Places(), Visit, "places") },
-        { "citations", BuildListingById(db.Citations(), Visit, "citations") }
-      };
+        root.Add("groups", new YamlSequenceNode(db.Groups.Select(g =>
+        {
+          var group = new YamlMappingNode();
+          if (!string.IsNullOrEmpty(g.Title))
+            group.Add("title", g.Title);
+          if (!string.IsNullOrEmpty(g.Description))
+            group.Add("description", g.Description);
+          var familyIds = g.Ids
+            .Select(f => db.TryGetValue(f, out Family family) ? family.Id.Primary : null)
+            .Where(f => !string.IsNullOrEmpty(f))
+            .ToList();
+          if (familyIds.Count > 0)
+            group.Add("families", new YamlSequenceNode(familyIds.Select(f => new YamlScalarNode(f))));
+          return group;
+        })));
+      }
+      root.Add("people", BuildListingById(db.Individuals(), Visit, "people"));
+      root.Add("families", BuildListingById(db.Families(), f => Visit(f, db), "families"));
+      root.Add("organizations", BuildListingById(db.Organizations(), Visit, "organizations"));
+      root.Add("places", BuildListingById(db.Places(), Visit, "places"));
+      root.Add("citations", BuildListingById(db.Citations(), Visit, "citations"));
       return new YamlDocument(root);
     }
 
@@ -236,7 +258,7 @@ namespace GedcomParser
 
       if (eventObj.Date.HasValue)
         node.Add("date", eventObj.Date.ToString("s"));
-
+      
       if (eventObj.Place != null)
       {
         var place = new YamlMappingNode()
@@ -408,11 +430,18 @@ namespace GedcomParser
       if (!string.IsNullOrEmpty(media.Src))
         mediaNode.Add("src", media.Src);
       if (!string.IsNullOrEmpty(media.Description))
-        mediaNode.Add("description", media.Description);
+      {
+        var scalar = new YamlScalarNode(media.Description);
+        if (media.Description.IndexOf('\n') >= 0)
+          scalar.Style = YamlDotNet.Core.ScalarStyle.Literal;
+        mediaNode.Add("description", scalar);
+      }
       if (!string.IsNullOrEmpty(media.MimeType))
         mediaNode.Add("mimetype", media.MimeType);
       if (media.Date.HasValue)
         mediaNode.Add("date", media.Date.ToString("s"));
+      if (media.TopicDate.HasValue)
+        mediaNode.Add("topic_date", media.TopicDate.ToString("s"));
       if (media.Width.HasValue)
         mediaNode.Add("width", media.Width.Value.ToString());
       if (media.Height.HasValue)

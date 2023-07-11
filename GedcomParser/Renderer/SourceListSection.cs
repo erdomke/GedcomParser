@@ -29,7 +29,7 @@ namespace GedcomParser
         .ToList();
     }
 
-    public void Render(HtmlTextWriter html, FencedDivExtension extension)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
       html.WriteStartSection(this);
 

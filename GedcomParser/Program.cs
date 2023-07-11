@@ -58,83 +58,12 @@ namespace GedcomParser
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
 
-      var builder = new MarkdownPipelineBuilder()
-        .UseGenericAttributes();
-      builder.Extensions.Add(new FencedDivExtension(db)
+      using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))
       {
-        Graphics = graphics
-      });
-
-      var pipeline = builder.Build();
-      var body = Markdown.ToHtml(markdown, pipeline);
-      var html = @"<html>
-<head>
-  <style>
-  body {
-    font-family: Calibri;
-    font-size: 10pt;
-  }
-  main {
-    max-width: 7.5in;
-    margin: 0 auto;
-  }
-  section {
-    page-break-inside: avoid;
-    page-break-after: always;
-  }
-  time {
-    font-weight: bold;
-  }
-  figure {
-    margin: 0;
-    text-align: center;
-  }
-  .diagrams {
-    display:flex;
-    flex-wrap: wrap;
-    justify-content:space-between;
-    align-items:center;
-  }
-  figcaption {
-    font-style: italic;
-  }
-  .person-index {
-    display:flex;
-  }
-  .person-index .filler {
-    flex: 1;
-    border-bottom: 1px dotted black;
-  }
-  a {
-    color: inherit;
-    text-decoration: none;
-  }
-  a:hover {
-    text-decoration: underline;
-  }
-  sup.cite {
-    color: #999;
-  }
-  .event-descrip {
-    flex:1;
-  }
-  .gallery {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 0.25in;
-    page-break-inside: avoid;
-  }
-  .gallery img
-  {
-    max-height: 3in;
-  }
-  </style>
-</head>
-<body><main>" + body + "<main></body></html>";
-      File.WriteAllText(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html", html);
-
+        var report = new ReportRenderer(db, graphics);
+        report.Write(writer);
+      }
+      
       var renderer = new AncestorRenderer(db, "DomkeEricMatthe19880316")
       {
         Graphics = graphics

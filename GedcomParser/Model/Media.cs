@@ -12,6 +12,7 @@ namespace GedcomParser.Model
     public string DuplicateOf { get; set; }
 
     public ExtendedDateRange Date { get; set; }
+    public ExtendedDateRange TopicDate { get; set; }
     public Place Place { get; set; }
     public string Src { get; set; }
     public string MimeType { get; set; }

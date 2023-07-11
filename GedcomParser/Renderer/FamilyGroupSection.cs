@@ -18,7 +18,7 @@ namespace GedcomParser
     public List<ResolvedFamily> Families { get; } = new List<ResolvedFamily>();
     public string Id => Families.First().Id.Primary;
 
-    public static IEnumerable<FamilyGroupSection> Create(IEnumerable<ResolvedFamily> resolvedFamilies, ReportOptions options, SourceListSection sourceList)
+    public static IEnumerable<FamilyGroupSection> Create(IEnumerable<ResolvedFamily> resolvedFamilies, IEnumerable<FamilyGroup> groups, SourceListSection sourceList)
     {
       var xref = new Dictionary<string, ResolvedFamily>();
       foreach (var family in resolvedFamilies)
@@ -27,7 +27,7 @@ namespace GedcomParser
           xref.Add(id, family);
       }
 
-      var result = options.Groups
+      var result = groups
         .Select(g =>
         {
           var resolved = new FamilyGroupSection()
@@ -63,8 +63,13 @@ namespace GedcomParser
       return result.OrderByDescending(g => g.Families.First().StartDate).ToList();
     }
 
-    public void Render(HtmlTextWriter html, FencedDivExtension extension)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
+      var paraBuilder = new ParagraphBuilder()
+      {
+        SourceList = _sourceList,
+        DirectAncestors = renderer.DirectAncestors
+      };
       html.WriteStartSection(this);
 
       foreach (var family in Families.Skip(1))
@@ -74,7 +79,7 @@ namespace GedcomParser
         html.WriteEndElement();
       }
 
-      var baseDirectory = Path.GetDirectoryName(extension.Database.BasePath);
+      var baseDirectory = Path.GetDirectoryName(renderer.Database.BasePath);
 
       html.WriteStartElement("div");
       html.WriteAttributeString("class", "diagrams");
@@ -83,7 +88,7 @@ namespace GedcomParser
       html.WriteAttributeString("class", "decendants");
       var decendantRenderer = new DecendantLayout()
       {
-        Graphics = extension.Graphics
+        Graphics = renderer.Graphics
       };
       decendantRenderer.Render(Families, baseDirectory).WriteTo(html);
       html.WriteEndElement();
@@ -108,7 +113,7 @@ namespace GedcomParser
       html.WriteAttributeString("class", "timeline");
       var timelineRenderer = new TimelineRenderer()
       {
-        Graphics = extension.Graphics
+        Graphics = renderer.Graphics
       };
       timelineRenderer.Render(Families, baseDirectory).WriteTo(html);
       html.WriteEndElement();
@@ -117,9 +122,6 @@ namespace GedcomParser
 
       foreach (var family in Families)
       {
-        html.WriteStartElement("p");  
-        var firstEvent = true;
-
         var allEvents = ResolvedEventGroup.Group(family.Events
           .Where(e => e.Event.Date.HasValue
             && e.Event.TypeString != "Arrival"
@@ -127,79 +129,14 @@ namespace GedcomParser
             && !(e.Event.Type == EventType.Residence && e.Event.Place == null))
           .OrderBy(e => e.Event.Date));
 
+        paraBuilder.StartParagraph(html);
         foreach (var ev in allEvents)
-        {
-          if (firstEvent)
-            firstEvent = false;
-          else
-            html.WriteString(" ");
-          ev.Description(html, _sourceList, true);
-        }
-        html.WriteEndElement();
+          paraBuilder.WriteEvent(html, ev, true);
+        paraBuilder.EndParagraph(html);
 
-        RenderGallery(html, family.Family.Media
+        RenderGallery(html, family.Media
           .Concat(family.Events.SelectMany(e => e.Event.Media)), true);
       }
-
-      /*var events = Families.SelectMany(f => f.Events)
-        .Where(e => e.Event.Date.HasValue)
-        .OrderBy(e => e.Event.Date)
-        .ToList();
-      if (events.Count > 0)
-      {
-        html.WriteStartElement("ul");
-        foreach (var resolvedEvent in events)
-        {
-          html.WriteStartElement("li");
-          html.WriteStartElement("div");
-          html.WriteAttributeString("class", "gallery");
-
-          html.WriteStartElement("div");
-          html.WriteAttributeString("class", "event-descrip");
-          html.WriteStartElement("time");
-          html.WriteString(resolvedEvent.Event.Date.ToString("yyyy MMM d"));
-          html.WriteEndElement();
-          html.WriteString(": ");
-          resolvedEvent.Description(html);
-
-          var eventCitations = resolvedEvent.Event.Citations
-            .Select(c => new { Id = c.Id.Primary, Index = _sourceList.Citations.IndexOf(c) })
-            .Where(c => c.Index >= 0)
-            .GroupBy(c => c.Index)
-            .Select(g => g.First())
-            .OrderBy(c => c.Index)
-            .ToList();
-          if (eventCitations.Count > 0)
-          {
-            html.WriteString(" ");
-            html.WriteStartElement("sup");
-            html.WriteAttributeString("class", "cite");
-            html.WriteString("[");
-            var first = true;
-            foreach (var citation in eventCitations)
-            {
-              if (first)
-                first = false;
-              else
-                html.WriteString(", ");
-              html.WriteStartElement("a");
-              html.WriteAttributeString("href", "#" + citation.Id);
-              html.WriteString((citation.Index + 1).ToString());
-              html.WriteEndElement();
-            }
-            html.WriteString("]");
-            html.WriteEndElement();
-          }
-          html.WriteEndElement();
-
-          RenderGallery(html, resolvedEvent.Event.Media
-            .Concat(resolvedEvent.Related.SelectMany(m => m.Media)), false);
-
-          html.WriteEndElement();
-          html.WriteEndElement();
-        }
-        html.WriteEndElement();
-      } */
 
       html.WriteEndElement();
     }
@@ -211,6 +148,19 @@ namespace GedcomParser
 
     private void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, bool inGallery)
     {
+      var articles = media
+        .Where(m => string.IsNullOrEmpty(m.Src)
+          && !string.IsNullOrEmpty(m.Description)
+          && !(m.Attributes.TryGetValue("hidden", out var hidden) && hidden == "true"))
+        .OrderBy(m => m.TopicDate)
+        .ToList();
+      foreach (var article in articles)
+      {
+        html.WriteStartElement("article");
+        html.WriteRaw(Markdig.Markdown.ToHtml(article.Description));
+        html.WriteEndElement();
+      }
+
       var images = media
         .Where(m => !string.IsNullOrEmpty(m.Src)
           && _imageExtensions.Contains(Path.GetExtension(m.Src))

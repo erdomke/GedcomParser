@@ -1,4 +1,5 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -189,7 +190,7 @@ namespace GedcomParser
       }
     }
 
-    public void Render(HtmlTextWriter html, FencedDivExtension extension)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
       html.WriteStartSection(this);
       var svg = Render();

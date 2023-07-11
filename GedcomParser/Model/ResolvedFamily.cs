@@ -16,10 +16,12 @@ namespace GedcomParser.Model
     public List<FamilyMember> Members { get; }
     public List<ResolvedEvent> Events { get; }
     public ExtendedDateTime StartDate { get; }
+    public List<Media> Media { get; } = new List<Media>();
 
     private ResolvedFamily(Family family, Database db)
     {
       Family = family;
+      Media.AddRange(family.Media);
       Members = db.FamilyLinks(family, FamilyLinkType.Other)
         .Select(l => new FamilyMember(db.GetValue<Individual>(l.Individual), l.Type))
         .ToList();
@@ -86,19 +88,17 @@ namespace GedcomParser.Model
           ranges.Add(new ExtendedDateRange(start, end));
         }
 
-        var individualEvents = new List<ResolvedEvent>();
-        foreach (var individualEvent in familyList.Key.Events)
+        var individualEvents = familyList.Key.Events.Select(e => new ResolvedEvent(e)).ToList();
+        foreach (var ev in individualEvents.Where(e => e.Event.Type == EventType.Burial
+          || (string.Equals(e.Event.TypeString, "Diagnosis", StringComparison.OrdinalIgnoreCase) && !e.Event.Date.HasValue))
+          .ToList())
         {
-          if (individualEvent.Type == EventType.Burial)
+          var deathEvent = individualEvents.FirstOrDefault(e => e.Event.Type == EventType.Death);
+          if (deathEvent != null)
           {
-            var deathEvent = individualEvents.FirstOrDefault(e => e.Event.Type == EventType.Death);
-            if (deathEvent != null)
-            {
-              deathEvent.Related.Add(individualEvent);
-              continue;
-            }
+            deathEvent.Related.Add(ev.Event);
+            individualEvents.Remove(ev);
           }
-          individualEvents.Add(new ResolvedEvent(individualEvent));
         }
 
         foreach (var resolved in individualEvents)
@@ -114,6 +114,19 @@ namespace GedcomParser.Model
               resolved.Secondary.AddRange(individualFamilies[idx].Item2.Parents);
             individualFamilies[idx].Item2.Events.Add(resolved);
           }
+        }
+
+        foreach (var media in familyList.Key.Media)
+        {
+          var date = media.TopicDate.HasValue ? media.TopicDate : media.Date;
+          if (!date.HasValue)
+            continue;
+
+          var idx = ranges.FindIndex(r => r.InRange(date));
+          if (idx < 0)
+            continue;
+
+          individualFamilies[idx].Item2.Media.Add(media);
         }
       }
       return result;

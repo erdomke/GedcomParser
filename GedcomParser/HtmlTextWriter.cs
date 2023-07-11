@@ -351,11 +351,13 @@ namespace GedcomParser
 
     public override void WriteRaw(string data)
     {
+      CloseCurrElement(false);
       _writer.Write(data);
     }
 
     public override void WriteRaw(char[] buffer, int index, int count)
     {
+      CloseCurrElement(false);
       _writer.Write(buffer, index, count);
     }
 
