@@ -5,13 +5,13 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace GedcomParser
 {
   internal class FamilyGroupSection : ISection
   {
-    private const double minCaptionWidth = 2.5 * 96;
-
     private SourceListSection _sourceList;
 
     public string Title { get; set; }
@@ -102,7 +102,7 @@ namespace GedcomParser
         if (!string.IsNullOrEmpty(figure.Caption))
         {
           html.WriteStartElement("figcaption");
-          html.WriteAttributeString("style", $"max-width:{Math.Max(minCaptionWidth, figure.Width)}px;");
+          html.WriteAttributeString("style", $"max-width:{Math.Max(2.5*96, figure.Width)}px;");
           html.WriteString(figure.Caption);
           html.WriteEndElement();
         }
@@ -135,7 +135,7 @@ namespace GedcomParser
         paraBuilder.EndParagraph(html);
 
         RenderGallery(html, family.Media
-          .Concat(family.Events.SelectMany(e => e.Event.Media)), true);
+          .Concat(family.Events.SelectMany(e => e.Event.Media)), renderer.Graphics);
       }
 
       html.WriteEndElement();
@@ -146,7 +146,11 @@ namespace GedcomParser
       ".png", ".gif", ".bmp", ".jpg", ".jpeg"
     };
 
-    private void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, bool inGallery)
+    private const double targetHeight = 3.2 * 96;
+    private const double lineWidth = 7 * 96;
+    private const double gap = 8;
+
+    private void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
     {
       var articles = media
         .Where(m => string.IsNullOrEmpty(m.Src)
@@ -168,50 +172,119 @@ namespace GedcomParser
         .Distinct()
         .OrderBy(m => m.Date.HasValue ? 0 : 1)
         .ThenBy(m => m.Date)
+        .Select(m => new ImageBox(m, graphics))
         .ToList();
       if (images.Count > 0)
       {
-        if (inGallery)
+        var rowWidth = 0.0;
+        var count = 0;
+        var start = 0;
+        for (var i = 0; i < images.Count; i++)
         {
-          html.WriteStartElement("div");
-          html.WriteAttributeString("class", "gallery");
+          rowWidth += images[i].BoxWidth;
+          count++;
+          if (count >= 2 && rowWidth + (count - 1) * gap > lineWidth)
+          {
+            var minWidth = images.Skip(start).Take(count).Sum(im => im.CaptionWidth) + (count - 1) * gap;
+            while (count > 2 && minWidth > lineWidth)
+            {
+              count--;
+              i--;
+              minWidth = images.Skip(start).Take(count).Sum(im => im.CaptionWidth) + (count - 1) * gap;
+            }
+
+            var totalWidth = images.Skip(start).Take(count).Sum(im => im.BoxWidth) + (count - 1) * gap;
+            var numAttempts = 0;
+            while (totalWidth > lineWidth && numAttempts < 10)
+            {
+              var factor = Math.Min(Math.Floor(lineWidth / totalWidth * 1000) / 1000, 0.99);
+              foreach (var image in images.Skip(start).Take(count))
+              {
+                image.ImageHeight *= factor;
+                image.ImageWidth *= factor;
+              }
+              totalWidth = images.Skip(start).Take(count).Sum(im => im.BoxWidth) + (count - 1) * gap;
+              numAttempts++;
+            }
+
+            start = i + 1;
+            count = 0;
+            rowWidth = 0;
+          }
         }
+
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "gallery");
         foreach (var image in images)
         {
           html.WriteStartElement("figure");
-          if (image.Width.HasValue)
-          {
-            var height = Math.Min(3, image.Height.Value / 96);
-            html.WriteAttributeString("style", $"width:max({minCaptionWidth}px, {image.Width.Value * height / image.Height.Value}in)");
-          }
+          html.WriteAttributeString("style", $"max-width:{image.BoxWidth}px;");
           html.WriteStartElement("img");
-          html.WriteAttributeString("src", image.Src);
+          html.WriteAttributeString("src", image.Media.Src);
+          html.WriteAttributeString("style", $"width:{image.ImageWidth}px;height:{image.ImageHeight}px");
           html.WriteEndElement();
 
-          if (!string.IsNullOrEmpty(image.Description)
-            || image.Date.HasValue
-            || image.Place != null)
-          {
-            html.WriteStartElement("figcaption");
-            if (inGallery && image.Date.HasValue)
-            {
-              html.WriteStartElement("time");
-              html.WriteString(image.Date.ToString("yyyy MMM d"));
-              html.WriteEndElement();
-              html.WriteString(": ");
-            }
-            html.WriteString(image.Description);
-            if (inGallery && image.Place != null)
-            {
-              html.WriteString(" at " + image.Place.Names.FirstOrDefault()?.Name);
-            }
-            html.WriteString(".");
-            html.WriteEndElement();
-          }
+          image.WriteCaption(html);
           html.WriteEndElement();
         }
-        if (inGallery)
+        html.WriteEndElement();
+      }
+    }
+
+    private class ImageBox
+    {
+      public Media Media { get; }
+      public double CaptionWidth { get; } = 2 * 96;
+      public double ImageWidth { get; set; }
+      public double ImageHeight { get; set; }
+      public double BoxWidth => Math.Max(ImageWidth, CaptionWidth);
+
+      public ImageBox(Media media, IGraphics graphics)
+      {
+        Media = media;
+        ImageHeight = targetHeight;
+        if (!media.Width.HasValue || !media.Height.HasValue)
+          ImageWidth = targetHeight;
+        else
+          ImageWidth = media.Width.Value * targetHeight / media.Height.Value;
+        var root = new XElement("root");
+        using (var writer = root.CreateWriter())
+          WriteCaption(writer);
+        var captionText = string.Join("", root.DescendantNodes().OfType<XText>().Select(t => t.Value));
+        if (string.IsNullOrEmpty(captionText))
+        {
+          CaptionWidth = 0;
+        }
+        else
+        {
+          var captionSize = graphics.MeasureText(ReportStyle.Default.FontName, ReportStyle.Default.BaseFontSize, captionText);
+          CaptionWidth = Math.Min(captionSize.Width, CaptionWidth);
+        }
+      }
+
+      public void WriteCaption(XmlWriter html)
+      {
+        if (!string.IsNullOrEmpty(Media.Description)
+            || Media.Date.HasValue
+            || Media.Place != null)
+        {
+          html.WriteStartElement("figcaption");
+          if (Media.Date.HasValue)
+          {
+            html.WriteStartElement("time");
+            html.WriteString(Media.Date.ToString("yyyy MMM d"));
+            html.WriteEndElement();
+            html.WriteString(": ");
+          }
+          if (!string.IsNullOrEmpty(Media.Description))
+            html.WriteRaw(ParagraphBuilder.ToInlineHtml(Media.Description));
+          if (Media.Place != null)
+          {
+            html.WriteString(" at " + Media.Place.Names.FirstOrDefault()?.Name);
+          }
+          html.WriteString(".");
           html.WriteEndElement();
+        }
       }
     }
   }

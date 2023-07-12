@@ -593,8 +593,16 @@ namespace GedcomParser
           {
             switch (text[i])
             {
-              case '\n': _writer.Write(_settings.NewLineChars); break;
-              default: _writer.Write(text[i]); break;
+              case '\r':
+                _writer.Write(_settings.NewLineChars);
+                break;
+              case '\n':
+                if (i == 0 || text[i] != '\r')
+                  _writer.Write(_settings.NewLineChars);
+                break;
+              default:
+                _writer.Write(text[i]);
+                break;
             }
           }
         }

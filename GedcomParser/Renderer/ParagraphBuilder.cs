@@ -1,7 +1,10 @@
 ﻿using GedcomParser.Model;
+using Markdig.Renderers;
+using Markdig;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -239,46 +242,53 @@ namespace GedcomParser.Renderer
         }
         AddDate(html, ev.Event.Date, includeDate);
       }
-      else if (ev.Event.Type == EventType.Residence)
+      else
       {
         AddNames(html, ev.Primary, NameForm.AutoPronounUpper, default);
         SetSubject(ev.Primary, ev.Primary.Skip(1).Any());
-        html.WriteString(" resided");
-        AddPlace(html, ev.Event);
+        var placeFirst = false;
+        switch (ev.Event.Type)
+        {
+          case EventType.Baptism:
+            html.WriteString(" was baptised");
+            placeFirst = true;
+            break;
+          case EventType.Confirmation:
+            html.WriteString(" underwent confirmation");
+            placeFirst = true;
+            break;
+          case EventType.Residence:
+            html.WriteString(" resided");
+            placeFirst = true;
+            break;
+          case EventType.Engagement:
+            html.WriteString(" got engaged");
+            placeFirst = true;
+            break;
+          default:
+            if (string.Equals(ev.Event.TypeString, "Met", StringComparison.OrdinalIgnoreCase))
+            {
+              html.WriteString(" first met");
+            }
+            else
+            {
+              html.WriteString(" underwent " + ev.Event.Type.ToString().ToLowerInvariant());
+            }
+            break;
+        }
+        if (placeFirst)
+          AddPlace(html, ev.Event);
         AddDate(html, ev.Event.Date, includeDate);
-      }
-      else if (ev.Event.Type == EventType.Baptism)
-      {
-        AddNames(html, ev.Primary, NameForm.AutoPronounUpper, ev.Event.Date);
-        SetSubject(ev.Primary, false);
-        html.WriteString(" was baptised");
-        AddPlace(html, ev.Event);
-        AddDate(html, ev.Event.Date, includeDate);
-      }
-      else if (ev.Event.Type == EventType.Confirmation)
-      {
-        AddNames(html, ev.Primary, NameForm.AutoPronounUpper, ev.Event.Date);
-        SetSubject(ev.Primary, false);
-        html.WriteString(" underwent confirmation");
-        AddPlace(html, ev.Event);
-        AddDate(html, ev.Event.Date, includeDate);
-      }
-      else
-      {
-        html.WriteString(ev.Event.TypeString ?? ev.Event.Type.ToString());
-        html.WriteString(" of ");
-        AddNames(html, ev.Primary, NameForm.AutoName, default);
-        SetSubject(ev.Primary, false);
-        AddDate(html, ev.Event.Date, includeDate);
-        AddPlace(html, ev.Event);
+        if (!placeFirst)
+          AddPlace(html, ev.Event);
       }
 
       html.WriteString(".");
 
-      if (ev.Event.Attributes.TryGetValue("Weight", out var weight))
+      if (!string.IsNullOrEmpty(ev.Event.Description))
       {
-        AddNames(html, ev.Primary, NameForm.AutoPronounUpper, default);
-        html.WriteString(" weighed " + weight + ".");
+        html.WriteString(" ");
+        html.WriteRaw(ToInlineHtml(ev.Event.Description));
       }
 
       foreach (var related in ev.Related)
@@ -308,6 +318,23 @@ namespace GedcomParser.Renderer
           }
           html.WriteString(".");
         }
+
+        if (!string.IsNullOrEmpty(related.Description))
+        {
+          html.WriteString(" ");
+          html.WriteRaw(ToInlineHtml(related.Description));
+        }
+      }
+    }
+
+    public static string ToInlineHtml(string markdown)
+    {
+      using (var writer = new StringWriter())
+      {
+        var renderer = new Markdig.Renderers.HtmlRenderer(writer);
+        renderer.ImplicitParagraph = true;
+        renderer.Render(Markdown.Parse(markdown));
+        return writer.ToString();
       }
     }
 

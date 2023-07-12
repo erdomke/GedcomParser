@@ -32,7 +32,11 @@ namespace GedcomParser
 
     public void Write(TextWriter writer)
     {
-      var html = new HtmlTextWriter(writer);
+      var html = new HtmlTextWriter(writer, new HtmlWriterSettings()
+      {
+        Indent = true,
+        IndentChars = "  "
+      });
       html.WriteStartElement("html");
       html.WriteStartElement("head");
       html.WriteElementString("style", @"body {
@@ -44,8 +48,7 @@ main {
   margin: 0 auto;
 }
 section {
-  page-break-inside: avoid;
-  page-break-after: always;
+  margin-top: 1in;
 }
 time {
   font-weight: bold;
@@ -88,8 +91,7 @@ sup.cite {
   flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 0.25in;
-  page-break-inside: avoid;
+  gap: 8px;
 }
 .gallery img
 {
