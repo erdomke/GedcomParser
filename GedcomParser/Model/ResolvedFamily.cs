@@ -103,16 +103,34 @@ namespace GedcomParser.Model
 
         foreach (var resolved in individualEvents)
         {
-          var idx = ranges.FindIndex(r => r.InRange(resolved.Event.Date));
-          if (idx >= 0)
+          var familyLink = default(ValueTuple<FamilyLinkType, ResolvedFamily>);
+          if (resolved.Event.Type == EventType.Birth)
+          {
+            familyLink = individualFamilies
+              .FirstOrDefault(f => f.Item1.HasFlag(FamilyLinkType.Birth));
+          }
+          else if (resolved.Event.Type == EventType.Adoption)
+          {
+            familyLink = individualFamilies
+              .FirstOrDefault(f => f.Item1.HasFlag(FamilyLinkType.Pet) || f.Item1.HasFlag(FamilyLinkType.Adopted));
+          }
+
+          if (familyLink.Item2 == null)
+          {
+            var idx = ranges.FindIndex(r => r.InRange(resolved.Event.Date));
+            if (idx >= 0)
+              familyLink = individualFamilies[idx];
+          }
+          else
+          {
+            resolved.Secondary.AddRange(familyLink.Item2.Parents);
+          }
+
+          if (familyLink.Item2 != null)
           {
             resolved.Primary.Add(familyList.Key);
-            resolved.PrimaryRole = individualFamilies[idx].Item1;
-            if (individualFamilies[idx].Item1.HasFlag(FamilyLinkType.Child)
-              && (resolved.Event.Type == EventType.Birth
-                || resolved.Event.Type == EventType.Adoption))
-              resolved.Secondary.AddRange(individualFamilies[idx].Item2.Parents);
-            individualFamilies[idx].Item2.Events.Add(resolved);
+            resolved.PrimaryRole = familyLink.Item1;
+            familyLink.Item2.Events.Add(resolved);
           }
         }
 

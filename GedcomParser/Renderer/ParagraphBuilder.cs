@@ -39,10 +39,10 @@ namespace GedcomParser.Renderer
       if (_inParagraph)
         html.WriteString(" ");
       _inParagraph = true;
-      if (eventGroup.Events.Any(e => e.Event.Type == EventType.Birth && e.Secondary.Count > 0))
+      if (eventGroup.Events.Any(e => (e.Event.Type == EventType.Birth || e.Event.Type == EventType.Adoption) && e.Secondary.Count > 0))
       {
         var births = eventGroup.Events
-          .Where(e => e.Event.Type == EventType.Birth)
+          .Where(e => (e.Event.Type == EventType.Birth || e.Event.Type == EventType.Adoption))
           .ToList();
         var deaths = eventGroup.Events
           .Where(e => e.Event.Type == EventType.Death)
@@ -50,12 +50,13 @@ namespace GedcomParser.Renderer
 
         AddNames(html, births.First().Secondary, NameForm.AutoName, births.Count > 1 ? default : births.First().Event.Date);
         SetSubject(births.First().Secondary, true);
-        html.WriteString(" gave birth to ");
-        if (births.Count == 1)
-          html.WriteString("1 child");
+        if (births.Any(e => e.Event.Type == EventType.Adoption))
+          html.WriteString(" adopted ");
         else
-          html.WriteString(births.Count + " children");
-        html.WriteString(" -- ");
+          html.WriteString(" gave birth to ");
+        
+        html.WriteString(ChildWord(births.SelectMany(e => e.Primary)));
+        html.WriteString(" — ");
         var first = true;
         foreach (var birth in births)
         {
@@ -165,6 +166,20 @@ namespace GedcomParser.Renderer
         }
         html.WriteString("]");
         html.WriteEndElement();
+      }
+    }
+
+    private string ChildWord(IEnumerable<Individual> individuals)
+    {
+      var count = individuals.Count();
+      if (individuals.Any(i => i.Species == Species.Human))
+        return count == 1 ? "1 child" : count + " children";
+      else if (individuals.Select(i => i.Species).Distinct().Skip(1).Any())
+        return count == 1 ? "1 pet" : count + " pets";
+      else
+      {
+        var animalName = individuals.First().Species.ToString().Replace('_', ' ').ToLowerInvariant();
+        return count == 1 ? "1 " + animalName : count + " " + animalName + "s";
       }
     }
 

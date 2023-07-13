@@ -4,6 +4,7 @@
   {
     Human,
     Dog,
-    GuineaPig
+    Cat,
+    Guinea_Pig
   }
 }

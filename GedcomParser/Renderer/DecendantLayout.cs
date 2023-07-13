@@ -88,7 +88,7 @@ namespace GedcomParser
           var edge = new Edge(familyNode, personReference[parent.Id.Primary].Node);
           graph.Edges.Add(edge);
         }
-        foreach (var child in family.Children(FamilyLinkType.Birth).Reverse())
+        foreach (var child in family.Children(FamilyLinkType.Birth).Concat(family.Children(FamilyLinkType.Pet)).Reverse())
         {
           var edge = new Edge(personReference[child.Id.Primary].Node, familyNode);
           graph.Edges.Add(edge);

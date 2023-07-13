@@ -45,6 +45,7 @@ namespace GedcomParser.Renderer
       var lines = families
         .SelectMany(f => f.Members)
         .Select(m => m.Individual)
+        .Where(i => i.BirthDate.HasValue || i.DeathDate.HasValue)
         .Distinct()
         .Select(i => new IndividualTimeline(i))
         .ToDictionary(i => i.Individual.Id.Primary);
@@ -55,7 +56,8 @@ namespace GedcomParser.Renderer
       {
         foreach (var line in resolvedEvent.Primary
             .Concat(resolvedEvent.Secondary)
-            .Select(i => lines[i.Id.Primary]))
+            .Select(i => lines.TryGetValue(i.Id.Primary, out var line) ? line : null)
+            .Where(l => l != null))
         {
           line.AddEvent(resolvedEvent);
         }
@@ -179,9 +181,13 @@ namespace GedcomParser.Renderer
       {
         Date = GetDate(resolvedEvent.Event.Date);
         Type = resolvedEvent.Event.Type;
-        foreach (var timeline in resolvedEvent.Primary.Select(i => lines[i.Id.Primary]))
+        foreach (var timeline in resolvedEvent.Primary
+          .Select(i => lines.TryGetValue(i.Id.Primary, out var line) ? line : null)
+          .Where(l => l != null))
           Nodes.Add((timeline, true));
-        foreach (var timeline in resolvedEvent.Secondary.Select(i => lines[i.Id.Primary]))
+        foreach (var timeline in resolvedEvent.Secondary
+          .Select(i => lines.TryGetValue(i.Id.Primary, out var line) ? line : null)
+          .Where(l => l != null))
           Nodes.Add((timeline, false));
       }
 

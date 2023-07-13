@@ -23,6 +23,9 @@ namespace GedcomParser.Model
           if (e.Event.Type == EventType.Birth)
             return "Birth:" 
               + (e.Secondary.Count < 1 ? Guid.NewGuid().ToString("N") : string.Join(":", e.Secondary.Select(s => s.Id.Primary)));
+          else if (e.Event.Type == EventType.Adoption)
+            return "Adoption:"
+              + (e.Secondary.Count < 1 ? Guid.NewGuid().ToString("N") : string.Join(":", e.Secondary.Select(s => s.Id.Primary)));
           else if (e.Event.Type == EventType.Occupation)
             return "Job:" + string.Join(":", e.Primary.Select(s => s.Id.Primary))
               + ":" + (((IHasId)e.Event.Organization ?? e.Event.Place)?.Id.Primary ?? Guid.NewGuid().ToString("N"));
@@ -37,7 +40,8 @@ namespace GedcomParser.Model
         .ToList();
 
       var birthGroups = result
-        .Where(g => g.Events.Any(e => e.Event.Type == EventType.Birth && e.Secondary.Count > 0))
+        .Where(g => g.Events.Any(e => (e.Event.Type == EventType.Birth || e.Event.Type == EventType.Adoption)
+          && e.Secondary.Count > 0))
         .ToList();
       var deathsToChange = result
         .Where(g => g.Events.Any(e => e.Event.Type == EventType.Death))
