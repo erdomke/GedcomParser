@@ -17,6 +17,7 @@ namespace GedcomParser.Model
         Neighbor = 0x100,
         Godparent = 0x200,
         Friend = 0x400,
-        MultipleBirth = 0x800
+        MultipleBirth = 0x800,
+        Pet = 0x1000 + Child
     }
 }

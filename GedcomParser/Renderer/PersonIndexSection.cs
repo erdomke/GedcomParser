@@ -20,7 +20,6 @@ namespace GedcomParser
     public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
       html.WriteStartSection(this);
-
       foreach (var person in _personIndex
         .OrderBy(p => p.Key.Names.First().Surname ?? p.Key.Name.Surname, StringComparer.OrdinalIgnoreCase)
         .ThenBy(p => p.Key.Name.Name, StringComparer.OrdinalIgnoreCase))
@@ -60,7 +59,6 @@ namespace GedcomParser
         html.WriteEndElement();
         html.WriteEndElement();
       }
-      html.WriteEndElement();
       html.WriteEndElement();
     }
   }

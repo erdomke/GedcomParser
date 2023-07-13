@@ -13,7 +13,7 @@ namespace GedcomParser
 
     public string Id => "source-list";
 
-    public IList<Citation> Citations { get; }
+    public List<Citation> Citations { get; }
 
     public SourceListSection(IEnumerable<ResolvedFamily> families)
     {

@@ -139,7 +139,7 @@ namespace GedcomParser.Renderer
       }
 
       var eventCitations = eventGroup.Events.SelectMany(e => e.Event.Citations)
-        .Select(c => new { Id = c.Id.Primary, Index = SourceList.Citations.IndexOf(c) })
+        .Select(c => new { Id = c.Id.Primary, Index = SourceList.Citations.FindIndex(o => o.Id.Primary == c.Id.Primary) })
         .Where(c => c.Index >= 0)
         .GroupBy(c => c.Index)
         .Select(g => g.First())
@@ -244,7 +244,8 @@ namespace GedcomParser.Renderer
       }
       else
       {
-        AddNames(html, ev.Primary, NameForm.AutoPronounUpper, default);
+        var nameType = ev.Event.Type == EventType.Engagement ? NameForm.AutoName : NameForm.AutoPronounUpper;
+        AddNames(html, ev.Primary, nameType, default);
         SetSubject(ev.Primary, ev.Primary.Skip(1).Any());
         var placeFirst = false;
         switch (ev.Event.Type)

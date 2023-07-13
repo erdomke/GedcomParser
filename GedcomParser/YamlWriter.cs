@@ -79,6 +79,8 @@ namespace GedcomParser
         node.Add("names", new YamlSequenceNode(individual.Names.Select(Visit)));
       if (individual.Sex != Sex.Unknown)
         node.Add("sex", individual.Sex.ToString());
+      if (individual.Species != Species.Human)
+        node.Add("species", individual.Species.ToString());
       if (individual.Picture != null)
         node.Add("picture", Media(individual.Picture));
       if (individual.Events.Count > 0)
@@ -424,7 +426,7 @@ namespace GedcomParser
       }
     }
 
-    private YamlMappingNode Media(Media media)
+    public YamlMappingNode Media(Media media)
     {
       var mediaNode = new YamlMappingNode();
       if (!string.IsNullOrEmpty(media.Src))

@@ -135,7 +135,7 @@ namespace GedcomParser
         paraBuilder.EndParagraph(html);
 
         RenderGallery(html, family.Media
-          .Concat(family.Events.SelectMany(e => e.Event.Media)), renderer.Graphics);
+          .Concat(family.Events.SelectMany(e => e.Event.Media.Concat(e.Related.SelectMany(r => r.Media)))), renderer.Graphics);
       }
 
       html.WriteEndElement();
@@ -277,7 +277,7 @@ namespace GedcomParser
             html.WriteString(": ");
           }
           if (!string.IsNullOrEmpty(Media.Description))
-            html.WriteRaw(ParagraphBuilder.ToInlineHtml(Media.Description));
+            html.WriteRaw(ParagraphBuilder.ToInlineHtml(Media.Description.TrimEnd('.')));
           if (Media.Place != null)
           {
             html.WriteString(" at " + Media.Place.Names.FirstOrDefault()?.Name);

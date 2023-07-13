@@ -16,6 +16,11 @@ namespace GedcomParser
   {
     static async Task Main(string[] args)
     {
+      //IndexDirectory.ProcessDirectory(@"C:\Users\erdomke\source\repos\FamilyTree\import"
+      //  , @"C:\Users\erdomke\source\repos\FamilyTree\target"
+      //  , "media");
+      //return;
+
       /*var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
       var db = new Database()
       {
@@ -84,7 +89,7 @@ namespace GedcomParser
       db.MoveResidenceEventsToFamily();
       db.CombineConsecutiveResidenceEvents();
       
-      var graphics = new SixLaborsGraphics();
+      var graphics = new SystemDrawingGraphics();
       var baseDir = Path.GetDirectoryName(path);
       var imageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
       {

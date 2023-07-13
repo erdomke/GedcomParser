@@ -103,6 +103,9 @@ namespace GedcomParser
           case "sex":
             individual.Sex = Enum.Parse<Sex>((string)property.Value);
             break;
+          case "species":
+            individual.Species = Enum.Parse<Species>((string)property.Value);
+            break;
           case "events":
             individual.Events.AddRange(((YamlSequenceNode)property.Value).Children
               .OfType<YamlMappingNode>()
