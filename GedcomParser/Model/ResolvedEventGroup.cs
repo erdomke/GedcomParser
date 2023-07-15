@@ -16,8 +16,6 @@ namespace GedcomParser.Model
     public static IList<ResolvedEventGroup> Group(IEnumerable<ResolvedEvent> events)
     {
       var result = events
-        .Where(e => e.Event.Date.HasValue)
-        .OrderBy(e => e.Event.Date)
         .GroupBy(e =>
         {
           if (e.Event.Type == EventType.Birth)
@@ -35,8 +33,9 @@ namespace GedcomParser.Model
           else
             return Guid.NewGuid().ToString("N");
         })
-        .Select(g => new ResolvedEventGroup(g))
-        .OrderBy(g => g.Events.First().Event.Date)
+        .Select(g => new ResolvedEventGroup(g.OrderBy(e => e.PrimaryOrder).ThenBy(e => e.Event.Date)))
+        .Where(g => g.Events.Any(e => e.Event.Date.HasValue || e.Event.Type == EventType.Birth))
+        .OrderBy(g => g.Events.FirstOrDefault(e => e.Event.Date.HasValue)?.Event.Date)
         .ToList();
 
       var birthGroups = result
@@ -56,6 +55,7 @@ namespace GedcomParser.Model
           birthGroup.Events.AddRange(death.Events);
         }
       }
+
       return result;
     }
   }

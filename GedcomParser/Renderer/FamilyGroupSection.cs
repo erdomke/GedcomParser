@@ -2,6 +2,7 @@
 using GedcomParser.Renderer;
 using SixLabors.ImageSharp;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -90,6 +91,8 @@ namespace GedcomParser
       {
         Graphics = renderer.Graphics
       };
+      if (Title == "Raman Cousins")
+        ;
       decendantRenderer.Render(Families, baseDirectory).WriteTo(html);
       html.WriteEndElement();
 
@@ -109,25 +112,26 @@ namespace GedcomParser
         html.WriteEndElement();
       }
 
-      html.WriteStartElement("figure");
-      html.WriteAttributeString("class", "timeline");
       var timelineRenderer = new TimelineRenderer()
       {
         Graphics = renderer.Graphics
       };
-      timelineRenderer.Render(Families, baseDirectory).WriteTo(html);
-      html.WriteEndElement();
-
-      html.WriteEndElement();
+      var timelineSvg = timelineRenderer.Render(Families, baseDirectory);
+      if (timelineSvg != null)
+      {
+        html.WriteStartElement("figure");
+        html.WriteAttributeString("class", "timeline");
+        timelineSvg.WriteTo(html);
+        html.WriteEndElement();
+        html.WriteEndElement();
+      }
 
       foreach (var family in Families)
       {
         var allEvents = ResolvedEventGroup.Group(family.Events
-          .Where(e => e.Event.Date.HasValue
-            && e.Event.TypeString != "Arrival"
+          .Where(e => e.Event.TypeString != "Arrival"
             && e.Event.TypeString != "Departure"
-            && !(e.Event.Type == EventType.Residence && e.Event.Place == null))
-          .OrderBy(e => e.Event.Date));
+            && !(e.Event.Type == EventType.Residence && e.Event.Place == null)));
 
         paraBuilder.StartParagraph(html);
         foreach (var ev in allEvents)
@@ -146,9 +150,11 @@ namespace GedcomParser
       ".png", ".gif", ".bmp", ".jpg", ".jpeg"
     };
 
-    private const double targetHeight = 3.2 * 96;
-    private const double lineWidth = 7 * 96;
+    private const double targetHeight = 3 * 96;
+    private const double lineWidth = 7.5 * 96 - 20;
     private const double gap = 8;
+    private const double maxHeight = 3.3 * 96;
+    // 577
 
     private void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
     {
@@ -174,6 +180,47 @@ namespace GedcomParser
         .ThenBy(m => m.Date)
         .Select(m => new ImageBox(m, graphics))
         .ToList();
+
+      var rows = new List<Row>();
+      Row processRow(IEnumerable<ImageBox> images, int count)
+      {
+        var row = new Row();
+        if (count == 1
+          && (lineWidth - images.Last().ImageWidth) > 120)
+        {
+          row.Boxes.AddRange(images);
+          images.Last().IncludeCaption = false;
+          row.Boxes.Add(new CaptionBox()
+          {
+            Top = images.Last().Media,
+            Height = images.Last().Height,
+            Width = Math.Min(120, Math.Floor(lineWidth - images.Last().ImageWidth - gap))
+          });
+          return row;
+        }
+        else if (count == 2)
+        {
+          var captionBoxWidth = Math.Floor(lineWidth - images.Sum(im => im.ImageWidth) - gap * count);
+          if (captionBoxWidth >= 90)
+          {
+            foreach (var image in images)
+              image.IncludeCaption = false;
+            row.Boxes.Add(images.ElementAt(0));
+            row.Boxes.Add(new CaptionBox()
+            {
+              Top = images.ElementAt(0).Media,
+              Bottom = images.ElementAt(1).Media,
+              Width = captionBoxWidth,
+              Height = images.ElementAt(0).Height
+            });
+            row.Boxes.Add(images.ElementAt(1));
+            return row;
+          }
+        }
+        row.Boxes.AddRange(images);
+        return row;
+      }
+
       if (images.Count > 0)
       {
         var rowWidth = 0.0;
@@ -181,7 +228,7 @@ namespace GedcomParser
         var start = 0;
         for (var i = 0; i < images.Count; i++)
         {
-          rowWidth += images[i].BoxWidth;
+          rowWidth += images[i].Width;
           count++;
           if (count >= 2 && rowWidth + (count - 1) * gap > lineWidth)
           {
@@ -193,19 +240,33 @@ namespace GedcomParser
               minWidth = images.Skip(start).Take(count).Sum(im => im.CaptionWidth) + (count - 1) * gap;
             }
 
-            var totalWidth = images.Skip(start).Take(count).Sum(im => im.BoxWidth) + (count - 1) * gap;
+            // Don't shrink the photos if there is less than 60% of the last photo
+            var cutoffWidth = images.Skip(start).Take(count - 1).Sum(im => im.Width)
+              + images.ElementAt(start + count - 1).Width * 0.6
+              + (count - 1) * gap;
+            if (count > 2 && cutoffWidth > lineWidth)
+            {
+              count--;
+              i--;
+            }
+
+            var totalWidth = images.Skip(start).Take(count).Sum(im => im.Width) + (count - 1) * gap;
             var numAttempts = 0;
-            while (totalWidth > lineWidth && numAttempts < 10)
+            while (Math.Abs(totalWidth - lineWidth) > 2
+              && numAttempts < 10
+              && images.ElementAt(start).Height < maxHeight)
             {
               var factor = Math.Min(Math.Floor(lineWidth / totalWidth * 1000) / 1000, 0.99);
               foreach (var image in images.Skip(start).Take(count))
               {
-                image.ImageHeight *= factor;
+                image.Height *= factor;
                 image.ImageWidth *= factor;
               }
-              totalWidth = images.Skip(start).Take(count).Sum(im => im.BoxWidth) + (count - 1) * gap;
+              totalWidth = images.Skip(start).Take(count).Sum(im => im.Width) + (count - 1) * gap;
               numAttempts++;
             }
+
+            rows.Add(processRow(images.Skip(start).Take(count), count));
 
             start = i + 1;
             count = 0;
@@ -213,43 +274,92 @@ namespace GedcomParser
           }
         }
 
-        html.WriteStartElement("div");
-        html.WriteAttributeString("class", "gallery");
-        foreach (var image in images)
+        if (start < images.Count)
+          rows.Add(processRow(images.Skip(start), count));
+        
+        foreach (var row in rows)
         {
-          html.WriteStartElement("figure");
-          html.WriteAttributeString("style", $"max-width:{image.BoxWidth}px;");
-          html.WriteStartElement("img");
-          html.WriteAttributeString("src", image.Media.Src);
-          html.WriteAttributeString("style", $"width:{image.ImageWidth}px;height:{image.ImageHeight}px");
-          html.WriteEndElement();
-
-          image.WriteCaption(html);
+          html.WriteStartElement("div");
+          html.WriteAttributeString("class", "gallery");
+          foreach (var box in row.Boxes)
+            box.ToHtml(html); 
           html.WriteEndElement();
         }
+      }
+    }
+
+    private class Row
+    {
+      public List<IBox> Boxes { get; } = new List<IBox>();
+      
+      public void ToHtml(XmlWriter html)
+      {
+
+      }
+    }
+
+    private interface IBox
+    {
+      public double Width { get; }
+      public double Height { get; }
+
+      void ToHtml(XmlWriter html);
+    }
+
+    private class CaptionBox : IBox
+    {
+      public Media Top { get; set; }
+      public Media Bottom { get; set; }
+
+      public double Height { get; set; }
+      public double Width { get; set; }
+
+      public void ToHtml(XmlWriter html)
+      {
+        html.WriteStartElement("div");
+        html.WriteAttributeString("class", "caption-box");
+        if (Bottom == null)
+          html.WriteAttributeString("style", $"flex:1;height:{Height:0.0}px");
+        else
+          html.WriteAttributeString("style", $"width:{Width:0.0}px;height:{Height:0.0}px");
+        WriteCaption(html, Top, "div", "◀ ", Bottom == null ? $"width:{Width:0.0}px" : null);
+        if (Bottom != null)
+          WriteCaption(html, Bottom, "div", " ▶", "text-align: right;margin-left: auto;");
         html.WriteEndElement();
       }
     }
 
-    private class ImageBox
+    private class ImageBox : IBox
     {
+      private bool _includeCaption = true;
+
       public Media Media { get; }
-      public double CaptionWidth { get; } = 2 * 96;
+      public double CaptionWidth { get; private set; } = 2 * 96;
       public double ImageWidth { get; set; }
-      public double ImageHeight { get; set; }
-      public double BoxWidth => Math.Max(ImageWidth, CaptionWidth);
+      public double Height { get; set; }
+      public double Width => Math.Max(ImageWidth, CaptionWidth);
+      public bool IncludeCaption
+      {
+        get => _includeCaption;
+        set
+        {
+          _includeCaption = value;
+          if (!value)
+            CaptionWidth = 0;
+        }
+      }
 
       public ImageBox(Media media, IGraphics graphics)
       {
         Media = media;
-        ImageHeight = targetHeight;
+        Height = targetHeight;
         if (!media.Width.HasValue || !media.Height.HasValue)
           ImageWidth = targetHeight;
         else
           ImageWidth = media.Width.Value * targetHeight / media.Height.Value;
         var root = new XElement("root");
         using (var writer = root.CreateWriter())
-          WriteCaption(writer);
+          WriteCaption(writer, media, "div", "▲ ");
         var captionText = string.Join("", root.DescendantNodes().OfType<XText>().Select(t => t.Value));
         if (string.IsNullOrEmpty(captionText))
         {
@@ -262,29 +372,48 @@ namespace GedcomParser
         }
       }
 
-      public void WriteCaption(XmlWriter html)
+      public void ToHtml(XmlWriter html)
       {
-        if (!string.IsNullOrEmpty(Media.Description)
-            || Media.Date.HasValue
-            || Media.Place != null)
+        html.WriteStartElement("figure");
+        html.WriteAttributeString("style", $"max-width:{Width:0.0}px;");
+        html.WriteStartElement("img");
+        html.WriteAttributeString("src", Media.Src);
+        html.WriteAttributeString("style", $"width:{ImageWidth:0.0}px;height:{Height:0.0}px");
+        html.WriteEndElement();
+        if (IncludeCaption)
+          WriteCaption(html, Media, "figcaption", "▲ ");
+        html.WriteEndElement();
+      }
+    }
+
+    private static void WriteCaption(XmlWriter html, Media media, string elementName, string prefixSuffix, string style = null)
+    {
+      if (!string.IsNullOrEmpty(media.Description)
+        || media.Date.HasValue
+        || media.Place != null)
+      {
+        html.WriteStartElement(elementName);
+        if (!string.IsNullOrEmpty(style))
+          html.WriteAttributeString("style", style);
+        if (prefixSuffix?.EndsWith(" ") == true)
+          html.WriteString(prefixSuffix);
+        if (media.Date.HasValue)
         {
-          html.WriteStartElement("figcaption");
-          if (Media.Date.HasValue)
-          {
-            html.WriteStartElement("time");
-            html.WriteString(Media.Date.ToString("yyyy MMM d"));
-            html.WriteEndElement();
-            html.WriteString(": ");
-          }
-          if (!string.IsNullOrEmpty(Media.Description))
-            html.WriteRaw(ParagraphBuilder.ToInlineHtml(Media.Description.TrimEnd('.')));
-          if (Media.Place != null)
-          {
-            html.WriteString(" at " + Media.Place.Names.FirstOrDefault()?.Name);
-          }
-          html.WriteString(".");
+          html.WriteStartElement("time");
+          html.WriteString(media.Date.ToString("yyyy MMM d"));
           html.WriteEndElement();
+          html.WriteString(": ");
         }
+        if (!string.IsNullOrEmpty(media.Description))
+          html.WriteRaw(ParagraphBuilder.ToInlineHtml(media.Description.TrimEnd('.')));
+        if (media.Place != null)
+        {
+          html.WriteString(" at " + media.Place.Names.FirstOrDefault()?.Name);
+        }
+        html.WriteString(".");
+        if (prefixSuffix?.StartsWith(" ") == true)
+          html.WriteString(prefixSuffix);
+        html.WriteEndElement();
       }
     }
   }

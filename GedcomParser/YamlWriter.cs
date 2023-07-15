@@ -112,13 +112,22 @@ namespace GedcomParser
         node.Add("type", family.Type.ToString());
 
       var children = new YamlSequenceNode();
-      foreach (var link in allLinks.Where(l => l.Type.HasFlag(FamilyLinkType.Birth)))
+      var childrenList = allLinks
+        .Where(l => l.Type.HasFlag(FamilyLinkType.Birth))
+        .OrderBy(l => l.Order)
+        .Select(l => db.TryGetValue(l.Individual, out Individual individual) ? individual : null)
+        .Where(i => i != null)
+        .ToList();
+      if (childrenList.Count > 0
+        && childrenList.All(i => i.BirthDate.HasValue))
+        childrenList = childrenList.OrderBy(i => i.BirthDate).ToList();
+
+      foreach (var child in childrenList)
       {
-        if (db.TryGetValue(link.Individual, out Individual individual))
-          children.Add(new YamlMappingNode()
-          {
-            { "$ref", "#/people/" + individual.Id.Primary }
-          });
+        children.Add(new YamlMappingNode()
+        {
+          { "$ref", "#/people/" + child.Id.Primary }
+        });
       }
       if (children.Any())
         node.Add("children", children);

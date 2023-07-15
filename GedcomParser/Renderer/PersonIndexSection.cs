@@ -14,7 +14,8 @@ namespace GedcomParser
 
     public void Add(Individual person, ISection section)
     {
-      _personIndex.Add(person, section);
+      if (person.Species == Species.Human)
+        _personIndex.Add(person, section);
     }
 
     public void Render(HtmlTextWriter html, ReportRenderer renderer)
@@ -30,7 +31,7 @@ namespace GedcomParser
         html.WriteStartElement("div");
         html.WriteAttributeString("class", "person");
         html.WriteElementString("strong", person.Key.Name.Surname);
-        html.WriteString(", " + person.Key.Name.Remaining);
+        html.WriteString((person.Key.Name.SurnameStart == 0 ? " " : ", ") + person.Key.Name.Remaining);
         if (person.Key.BirthDate.HasValue || person.Key.DeathDate.HasValue)
         {
           html.WriteStartElement("span");

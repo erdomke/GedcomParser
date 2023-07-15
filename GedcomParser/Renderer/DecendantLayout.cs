@@ -68,7 +68,10 @@ namespace GedcomParser
       var personReference = new Dictionary<string, Person>();
       
       var graph = new GeometryGraph();
-      foreach (var person in OrderedIndividuals(families)
+      foreach (var person in families
+        .SelectMany(f => f.Members)
+        .Select(m => m.Individual)
+        .Distinct()
         .Select(i => new Person(i, Graphics, baseDirectory))
         .Reverse())
       {
@@ -262,6 +265,11 @@ namespace GedcomParser
         {
           _lines.Add(Measure(name.Name.Substring(0, name.SurnameStart).Trim(), graphics, style, style.BaseFontSize));
           _lines.Add(Measure(name.Name.Substring(name.SurnameStart).Trim(), graphics, style, style.BaseFontSize));
+        }
+        else if (name.SurnameLength > 0 && name.SurnameLength < name.Name.Length)
+        {
+          _lines.Add(Measure(name.Name.Substring(0, name.SurnameLength).Trim(), graphics, style, style.BaseFontSize));
+          _lines.Add(Measure(name.Name.Substring(name.SurnameLength).Trim(), graphics, style, style.BaseFontSize));
         }
         else
         {

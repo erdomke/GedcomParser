@@ -49,6 +49,8 @@ namespace GedcomParser.Renderer
         .Distinct()
         .Select(i => new IndividualTimeline(i))
         .ToDictionary(i => i.Individual.Id.Primary);
+      if (lines.Count <= 1)
+        return null;
       var events = AllEvents(families);
 
       var links = new List<EventLink>();
@@ -127,11 +129,17 @@ namespace GedcomParser.Renderer
 
       var height = top;
 
-      var lineCount = (endDate.Value.Year - startDate.Value.Year) / 10;
+      var interval = 10;
+      var lineCount = (endDate.Value.Year - startDate.Value.Year) / interval;
+      while (lineCount > 16)
+      {
+        interval += 10;
+        lineCount = (endDate.Value.Year - startDate.Value.Year) / interval;
+      }
       var style = ReportStyle.Default;
       for (var i = 0; i <= lineCount; i++)
       {
-        var decadeStart = startDate.Value.AddYears(10 * i);
+        var decadeStart = startDate.Value.AddYears(interval * i);
         var position = (decadeStart - startDate.Value).TotalDays * pxPerDay;
         grid.Add(new XElement(SvgUtil.Ns + "line"
           , new XAttribute("x1", position)

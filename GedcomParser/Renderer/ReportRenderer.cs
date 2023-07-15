@@ -92,11 +92,17 @@ sup.cite {
   justify-content: space-between;
   align-items: flex-start;
   gap: 8px;
+  break-inside: avoid;
+  margin: 8px 0;
 }
-.gallery img
-{
-  max-height: 3in;
+.caption-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  break-inside: avoid;
 }
+
 article {
   background: #eee;
 }");

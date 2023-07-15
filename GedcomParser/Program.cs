@@ -116,7 +116,7 @@ namespace GedcomParser
         catch (Exception) { }
       }
 
-      //await db.GeocodePlaces();
+      await db.GeocodePlaces();
       new YamlWriter().Write(db, path);
     }
 

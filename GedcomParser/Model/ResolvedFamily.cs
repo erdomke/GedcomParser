@@ -18,12 +18,13 @@ namespace GedcomParser.Model
     public ExtendedDateTime StartDate { get; }
     public List<Media> Media { get; } = new List<Media>();
 
-    private ResolvedFamily(Family family, Database db)
+    private ResolvedFamily(Family family, Database db) 
     {
       Family = family;
       Media.AddRange(family.Media);
       Members = db.FamilyLinks(family, FamilyLinkType.Other)
-        .Select(l => new FamilyMember(db.GetValue<Individual>(l.Individual), l.Type))
+        .OrderBy(l => l.Order)
+        .Select(l => new FamilyMember(db.GetValue<Individual>(l.Individual), l.Type, l.Order))
         .ToList();
       
       Events = family.Events
@@ -42,18 +43,88 @@ namespace GedcomParser.Model
         .Select(e => e.Date.Start)
         .Where(d => d.HasValue)
         .ToList();
-      if (familyDates.Count < 1)
-      {
-        familyDates.AddRange(Members
-          .Where(m => m.Role.HasFlag(FamilyLinkType.Parent))
-          .SelectMany(m => m.Individual.Events.Where(e => e.Type == EventType.Birth))
-          .Where(e => e.Date.HasValue)
-          .Select(e => e.Date.Start.AddYears(16)));
-        StartDate = familyDates.Max();
-      }
-      else
+
+      if (familyDates.Count >= 1) 
       {
         StartDate = familyDates.Min();
+        return;
+      }
+
+      familyDates.AddRange(Members
+        .Where(m => m.Role.HasFlag(FamilyLinkType.Parent))
+        .SelectMany(m => m.Individual.Events.Where(e => e.Type == EventType.Birth))
+        .Where(e => e.Date.HasValue)
+        .Select(e => e.Date.Start.AddYears(16)));
+      if (familyDates.Count > 0)
+      {
+        StartDate = familyDates.Max();
+        return;
+      }
+
+      foreach (var parent in Parents.Where(p => !p.FamilyInferredBirthDate.HasValue))
+      {
+        InferBirthDates(db.Siblings(parent));
+      }
+
+      familyDates.AddRange(Members
+        .Where(m => m.Role.HasFlag(FamilyLinkType.Parent)
+          && m.Individual.FamilyInferredBirthDate.HasValue)
+        .Select(m => m.Individual.FamilyInferredBirthDate.Start.AddYears(16)));
+      if (familyDates.Count > 0)
+      {
+        StartDate = familyDates.Max();
+        return;
+      }
+    }
+
+    private void InferBirthDates(IEnumerable<Individual> individuals)
+    {
+      var siblings = individuals.ToList();
+      if (!siblings.Any(i => i.BirthDate.HasValue))
+        return;
+      var start = 0;
+      while (true)
+      {
+        var end = siblings.FindIndex(start, i => i.BirthDate.HasValue);
+        if (start == end)
+        {
+          start++;
+          continue;
+        }
+        else if (end < 0)
+        {
+          if (start < siblings.Count)
+          {
+            var date = siblings[start - 1].BirthDate;
+            for (var i = start; i < siblings.Count; i++)
+            {
+              date = new ExtendedDateRange(date.Start.AddYears(2));
+              siblings[i].FamilyInferredBirthDate = date;
+            }
+          }
+          break;
+        }
+        else if (start == 0)
+        {
+          var date = siblings[end].BirthDate;
+          for (var i = end - 1; i >= 0; i--)
+          {
+            date = new ExtendedDateRange(date.Start.AddYears(-2));
+            siblings[i].FamilyInferredBirthDate = date;
+          }
+          start = end + 1;
+        }
+        else if (siblings[start - 1].BirthDate.TryGetDiff(siblings[end].BirthDate, out var min, out var _))
+        {
+          var months = (int)(min.TotalMonths / (end - start + 1));
+          var date = siblings[start - 1].BirthDate;
+          for (var i = start; i < end; i++)
+          {
+            date = new ExtendedDateRange(date.Start.AddMonths(months));
+            siblings[i].FamilyInferredBirthDate = date;
+          }
+          start = end + 1;
+        }
       }
     }
 
@@ -71,24 +142,26 @@ namespace GedcomParser.Model
         .Select(f => new ResolvedFamily(f, db))
         .ToList();
       var individualLookup = result.SelectMany(f => f.Members
-        .Select(i => ValueTuple.Create(i, f)))
-        .ToLookup(t => t.Item1.Individual, t => ValueTuple.Create(t.Item1.Role, t.Item2));
-      foreach (var familyList in individualLookup)
+        .Select(i => new { Member = i, Family = f }))
+        .OrderBy(t => t.Member.Order)
+        .ToLookup(t => t.Member.Individual, t => new MemberFamily(t.Family, t.Member.Role, t.Member.Order));
+      foreach (var memberFamilies in individualLookup)
       {
-        var individualFamilies = familyList.OrderBy(f => f.Item2.StartDate).ToList();
+        var individual = memberFamilies.Key;
+        var individualFamilies = memberFamilies.OrderBy(f => f.Family.StartDate).ToList();
         var ranges = new List<ExtendedDateRange>();
         for (var i = 0; i < individualFamilies.Count; i++)
         {
-          var start = individualFamilies[i].Item2.StartDate;
+          var start = individualFamilies[i].Family.StartDate;
           if (i == 0)
             start = default(ExtendedDateTime);
           var end = default(ExtendedDateTime);
           if (i + 1 < individualFamilies.Count)
-            end = individualFamilies[i + 1].Item2.StartDate;
+            end = individualFamilies[i + 1].Family.StartDate;
           ranges.Add(new ExtendedDateRange(start, end));
         }
 
-        var individualEvents = familyList.Key.Events.Select(e => new ResolvedEvent(e)).ToList();
+        var individualEvents = individual.Events.Select(e => new ResolvedEvent(e)).ToList();
         foreach (var ev in individualEvents.Where(e => e.Event.Type == EventType.Burial
           || (string.Equals(e.Event.TypeString, "Diagnosis", StringComparison.OrdinalIgnoreCase) && !e.Event.Date.HasValue))
           .ToList())
@@ -101,21 +174,39 @@ namespace GedcomParser.Model
           }
         }
 
+        if (!individual.Events.Any(e => e.Type == EventType.Birth))
+        {
+          var memberFamily = individualFamilies
+            .FirstOrDefault(f => f.Role.HasFlag(FamilyLinkType.Birth));
+          if (memberFamily != null)
+          {
+            var resolved = new ResolvedEvent(new Event()
+            {
+              Type = EventType.Birth
+            });
+            resolved.Primary.Add(individual);
+            resolved.PrimaryOrder = memberFamily.Order;
+            resolved.PrimaryRole = FamilyLinkType.Birth;
+            resolved.Secondary.AddRange(memberFamily.Family.Parents);
+            memberFamily.Family.Events.Add(resolved);
+          }
+        }
+
         foreach (var resolved in individualEvents)
         {
-          var familyLink = default(ValueTuple<FamilyLinkType, ResolvedFamily>);
+          var familyLink = default(MemberFamily);
           if (resolved.Event.Type == EventType.Birth)
           {
             familyLink = individualFamilies
-              .FirstOrDefault(f => f.Item1.HasFlag(FamilyLinkType.Birth));
+              .FirstOrDefault(f => f.Role.HasFlag(FamilyLinkType.Birth));
           }
           else if (resolved.Event.Type == EventType.Adoption)
           {
             familyLink = individualFamilies
-              .FirstOrDefault(f => f.Item1.HasFlag(FamilyLinkType.Pet) || f.Item1.HasFlag(FamilyLinkType.Adopted));
+              .FirstOrDefault(f => f.Role.HasFlag(FamilyLinkType.Pet) || f.Role.HasFlag(FamilyLinkType.Adopted));
           }
 
-          if (familyLink.Item2 == null)
+          if (familyLink == null)
           {
             var idx = ranges.FindIndex(r => r.InRange(resolved.Event.Date));
             if (idx >= 0)
@@ -123,18 +214,19 @@ namespace GedcomParser.Model
           }
           else
           {
-            resolved.Secondary.AddRange(familyLink.Item2.Parents);
+            resolved.Secondary.AddRange(familyLink.Family.Parents);
           }
 
-          if (familyLink.Item2 != null)
+          if (familyLink != null)
           {
-            resolved.Primary.Add(familyList.Key);
-            resolved.PrimaryRole = familyLink.Item1;
-            familyLink.Item2.Events.Add(resolved);
+            resolved.Primary.Add(memberFamilies.Key);
+            resolved.PrimaryOrder = familyLink.Order;
+            resolved.PrimaryRole = familyLink.Role;
+            familyLink.Family.Events.Add(resolved);
           }
         }
 
-        foreach (var media in familyList.Key.Media)
+        foreach (var media in individual.Media)
         {
           var date = media.TopicDate.HasValue ? media.TopicDate : media.Date;
           if (!date.HasValue)
@@ -144,22 +236,24 @@ namespace GedcomParser.Model
           if (idx < 0)
             continue;
 
-          individualFamilies[idx].Item2.Media.Add(media);
+          individualFamilies[idx].Family.Media.Add(media);
         }
       }
       return result;
     }
-  }
 
-  public class IndividualEvent
-  {
-    public Individual Individual { get; }
-    public Event Event { get; }
-
-    public IndividualEvent(Individual individual, Event @event)
+    private class MemberFamily
     {
-      Individual = individual;
-      Event = @event;
+      public ResolvedFamily Family { get; }
+      public FamilyLinkType Role { get; }
+      public int Order { get; }
+
+      public MemberFamily(ResolvedFamily family, FamilyLinkType role, int order)
+      {
+        Family = family;
+        Role = role;
+        Order = order;
+      }
     }
   }
 }

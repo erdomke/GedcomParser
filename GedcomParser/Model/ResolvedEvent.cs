@@ -11,6 +11,8 @@ namespace GedcomParser.Model
   {
     public List<Individual> Primary { get; } = new List<Individual>();
 
+    public int PrimaryOrder { get; set; }
+
     public FamilyLinkType PrimaryRole { get; set; }
 
     public List<Individual> Secondary { get; } = new List<Individual>();

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Text;
@@ -211,6 +212,23 @@ namespace GedcomParser
       }
     }
 
+    public ExtendedDateTime(DateTime dateTime)
+    {
+      _data = 0;
+
+      Calendar = DateCalendar.Gregorian;
+      Certainty = DateCertainty.Known;
+      Kind = dateTime.Kind;
+      Precision = YearPrecision.Year;
+      Year = dateTime.Year;
+      Month = dateTime.Month;
+      Day = dateTime.Day;
+      Hour = dateTime.Hour;
+      Minute = dateTime.Minute;
+      Second = dateTime.Second;
+      Millisecond = dateTime.Millisecond;
+    }
+
     public ExtendedDateTime AddYears(int years)
     {
       if (!HasValue)
@@ -221,6 +239,37 @@ namespace GedcomParser
         _data = _data
       };
       result.Year = Year + years;
+      return result;
+    }
+
+    public ExtendedDateTime AddMonths(int months)
+    {
+      if (!HasValue)
+        return this;
+
+      var years = months / 12;
+      months = months % 12;
+
+      var result = new ExtendedDateTime()
+      {
+        _data = _data
+      };
+      result.Year = Year + years;
+      var newMonth = Month + months;
+      if (newMonth > 12)
+      {
+        result.Year++;
+        result.Month = newMonth - 12;
+      }
+      else if (newMonth < 1)
+      {
+        result.Year--;
+        result.Month = 12 + newMonth;
+      }
+      else
+      {
+        result.Month = newMonth;
+      }
       return result;
     }
 

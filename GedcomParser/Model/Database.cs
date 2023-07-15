@@ -28,6 +28,7 @@ namespace GedcomParser.Model
 
     public void Add(FamilyLink link)
     {
+      link.Order = _relationships[link.Family].Count();
       _relationships.Add(link.Individual, link);
       _relationships.Add(link.Family, link);
     }
@@ -69,67 +70,27 @@ namespace GedcomParser.Model
 
     public async Task GeocodePlaces()
     {
-      var client = new HttpClient();
-      client.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("erdomke-GedcomParser", "1.0.0"));
-      foreach (var place in Places()
-        .Where(p => !p.Attributes.TryGetValue("geocoded", out var geocoded) || geocoded != "true"))
+      using (var client = new HttpClient())
       {
-        Console.WriteLine("Geocoding: " + place.Names.First().Name);
-        var url = "https://nominatim.openstreetmap.org/search?format=geojson&addressdetails=1&extratags=1&q=" + Uri.EscapeDataString(place.Names.First().Name);
-        var jsonString = await client.GetStringAsync(url);
-        var yaml = new YamlStream();
-        using (var reader = new StringReader(jsonString))
-          yaml.Load(reader);
-        var firstMatch = yaml.Documents[0].RootNode.Item("features").EnumerateArray().FirstOrDefault();
-        place.Attributes["geocoded"] = "true";
-        if (firstMatch != null)
+        client.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("erdomke-GedcomParser", "1.0.0"));
+        foreach (var place in Places()
+          .Where(p => !p.Attributes.TryGetValue("geocoded", out var geocoded) || geocoded != "true"))
         {
-          var placeName = new PlaceName()
+          var allPlaces = await GetMatches(client, place.Names.First().Name);
+          var match = allPlaces.FirstOrDefault();
+          if (match != null)
           {
-            Name = firstMatch.Item("properties").Item("display_name").String()
-          };
-          var address = firstMatch.Item("properties").Item("address") as YamlMappingNode;
-          if (address != null)
-          {
-            foreach (var part in address.Children)
+            place.Names.InsertRange(0, match.Names);
+            foreach (var attr in match.Attributes)
+              place.Attributes[attr.Key] = attr.Value;
+            place.Links.AddRange(match.Links);
+            if (match.BoundingBox.Count > 0)
             {
-              switch (part.Key.String())
-              {
-                case "suburb":
-                case "country_code":
-                case "state_district":
-                case "boundary":
-                case "ISO3166-2-lvl4":
-                case "ISO3166-2-lvl5":
-                case "ISO3166-2-lvl6":
-                case "ISO3166-2-lvl15":
-                  break;
-                default:
-                  placeName.Parts.Add(new KeyValuePair<string, string>(part.Key.String(), part.Value.String()));
-                  break;
-              }
+              place.BoundingBox.Clear();
+              place.BoundingBox.AddRange(match.BoundingBox);
             }
-          }
-          place.Names.Insert(0, placeName);
-          var wikidata = firstMatch.Item("properties").Item("extratags").Item("wikidata").String();
-          if (!string.IsNullOrEmpty(wikidata))
-            place.Links.Add(new Link()
-            {
-              Url = new Uri("https://www.wikidata.org/wiki/" + wikidata)
-            });
-          var wikipedia = (firstMatch.Item("properties").Item("extratags").Item("wikipedia").String() ?? "").Split(':');
-          if (wikipedia.Length == 2)
-            place.Links.Add(new Link()
-            {
-              Url = new Uri($"https://{wikipedia[0]}.wikipedia.org/wiki/{wikipedia[1].Replace(' ', '_')}")
-            });
-          var bbox = firstMatch.Item("bbox") as YamlSequenceNode;
-          if (bbox != null)
-            place.BoundingBox.AddRange(bbox.Children.Select(c => double.Parse(c.String())));
-          if (firstMatch.Item("geometry").Item("type").String() == "Point")
-          {
-            place.Longitude = double.Parse(firstMatch.Item("geometry").Item("coordinates").Item(0).String());
-            place.Latitude = double.Parse(firstMatch.Item("geometry").Item("coordinates").Item(1).String());
+            place.Latitude = match.Latitude;
+            place.Longitude = match.Longitude;
           }
         }
       }
@@ -137,16 +98,202 @@ namespace GedcomParser.Model
       MarkDuplicates();
     }
 
+    private static async Task<IEnumerable<Place>> GetMatches(HttpClient client, string name)
+    {
+      Console.WriteLine("Geocoding: " + name);
+      var url = "https://nominatim.openstreetmap.org/search?format=geojson&addressdetails=1&extratags=1&q=" + Uri.EscapeDataString(name);
+      var jsonString = await client.GetStringAsync(url);
+      var yaml = new YamlStream();
+      using (var reader = new StringReader(jsonString))
+        yaml.Load(reader);
+
+      var places = new List<Place>();
+      foreach (var match in yaml.Documents[0].RootNode.Item("features").EnumerateArray())
+      {
+        var place = new Place();
+        places.Add(place);
+        place.Attributes["geocoded"] = "true";
+
+        var placeName = new PlaceName()
+        {
+          Name = match.Item("properties").Item("display_name").String()
+        };
+        var address = match.Item("properties").Item("address") as YamlMappingNode;
+        if (address != null)
+        {
+          foreach (var part in address.Children)
+          {
+            switch (part.Key.String())
+            {
+              case "suburb":
+              case "country_code":
+              case "state_district":
+              case "boundary":
+              case "ISO3166-2-lvl4":
+              case "ISO3166-2-lvl5":
+              case "ISO3166-2-lvl6":
+              case "ISO3166-2-lvl15":
+                break;
+              default:
+                placeName.Parts.Add(new KeyValuePair<string, string>(part.Key.String(), part.Value.String()));
+                break;
+            }
+          }
+          if (TryGetDisplayName(placeName.Parts, out var displayName))
+            placeName.Name = displayName;
+        }
+
+        place.Names.Insert(0, placeName);
+        var wikidata = match.Item("properties").Item("extratags").Item("wikidata").String();
+        if (!string.IsNullOrEmpty(wikidata))
+          place.Links.Add(new Link()
+          {
+            Url = new Uri("https://www.wikidata.org/wiki/" + wikidata)
+          });
+        var wikipedia = (match.Item("properties").Item("extratags").Item("wikipedia").String() ?? "").Split(':');
+        if (wikipedia.Length == 2)
+          place.Links.Add(new Link()
+          {
+            Url = new Uri($"https://{wikipedia[0]}.wikipedia.org/wiki/{wikipedia[1].Replace(' ', '_')}")
+          });
+        var bbox = match.Item("bbox") as YamlSequenceNode;
+        if (bbox != null)
+          place.BoundingBox.AddRange(bbox.Children.Select(c => double.Parse(c.String())));
+        if (match.Item("geometry").Item("type").String() == "Point")
+        {
+          place.Longitude = double.Parse(match.Item("geometry").Item("coordinates").Item(0).String());
+          place.Latitude = double.Parse(match.Item("geometry").Item("coordinates").Item(1).String());
+        }
+      }
+      return places;
+    }
+
+    private static bool TryGetDisplayName(IEnumerable<KeyValuePair<string, string>> parts, out string displayName)
+    {
+      var partDict = parts.ToDictionary(k => k.Key, k => k.Value, StringComparer.OrdinalIgnoreCase);
+      if (partDict.TryGetValue("amenity", out var amenity)
+        || partDict.TryGetValue("office", out amenity)
+        || partDict.TryGetValue("building", out amenity)
+        || partDict.TryGetValue("commercial", out amenity))
+      {
+        displayName = amenity;
+        return true;
+      }
+      else if (partDict.TryGetValue("country", out var country))
+      {
+        var partList = new List<string>();
+        if (partDict.TryGetValue("road", out var road))
+        {
+          if (partDict.TryGetValue("house_number", out var houseNumber))
+            partList.Add(houseNumber + " " + road);
+          else
+            partList.Add(road);
+        }
+
+        if (partDict.TryGetValue("city", out var city)
+          || partDict.TryGetValue("town", out city)
+          || partDict.TryGetValue("village", out city))
+        {
+          partList.Add(city);
+        }
+
+        if (partDict.TryGetValue("state", out var state))
+        {
+          if (_stateAbbreviations.TryGetValue(state, out var abbr))
+            partList.Add(abbr);
+          else
+            partList.Add(state);
+        }
+
+        if (country == "United States")
+          partList.Add("USA");
+        else
+          partList.Add(country);
+
+        displayName = string.Join(", ", partList);
+        return true;
+      }
+      else
+      {
+        displayName = null;
+        return false;
+      }
+    }
+
+    private static Dictionary<string, string> _stateAbbreviations = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+      {"Alabama", "AL"},
+      {"Kentucky", "KY"},
+      {"Ohio", "OH"},
+      {"Alaska", "AK"},
+      {"Louisiana", "LA"},
+      {"Oklahoma", "OK"},
+      {"Arizona", "AZ"},
+      {"Maine", "ME"},
+      {"Oregon", "OR"},
+      {"Arkansas", "AR"},
+      {"Maryland", "MD"},
+      {"Pennsylvania", "PA"},
+      {"American Samoa", "AS"},
+      {"Massachusetts", "MA"},
+      {"Puerto Rico", "PR"},
+      {"California", "CA"},
+      {"Michigan", "MI"},
+      {"Rhode Island", "RI"},
+      {"Colorado", "CO"},
+      {"Minnesota", "MN"},
+      {"South Carolina", "SC"},
+      {"Connecticut", "CT"},
+      {"Mississippi", "MS"},
+      {"South Dakota", "SD"},
+      {"Delaware", "DE"},
+      {"Missouri", "MO"},
+      {"Tennessee", "TN"},
+      {"District of Columbia", "DC"},
+      {"Montana", "MT"},
+      {"Texas", "TX"},
+      {"Florida", "FL"},
+      {"Nebraska", "NE"},
+      {"Trust Territories", "TT"},
+      {"Georgia", "GA"},
+      {"Nevada", "NV"},
+      {"Utah", "UT"},
+      {"Guam", "GU"},
+      {"New Hampshire", "NH"},
+      {"Vermont", "VT"},
+      {"Hawaii", "HI"},
+      {"New Jersey", "NJ"},
+      {"Virginia", "VA"},
+      {"Idaho", "ID"},
+      {"New Mexico", "NM"},
+      {"Virgin Islands", "VI"},
+      {"Illinois", "IL"},
+      {"New York", "NY"},
+      {"Washington", "WA"},
+      {"Indiana", "IN"},
+      {"North Carolina", "NC"},
+      {"West Virginia", "WV"},
+      {"Iowa", "IA"},
+      {"North Dakota", "ND"},
+      {"Wisconsin", "WI"},
+      {"Kansas", "KS"},
+      {"Northern Mariana Islands", "MP"},
+      {"Wyoming", "WY"},
+    };
+
     public void MarkDuplicates()
     {
       foreach (var group in Places().GroupBy(p =>
       {
+        var result = "";
         if (p.BoundingBox.Count > 0)
-          return string.Join(",", p.BoundingBox.Select(d => d.ToString()));
-        else if (p.Latitude.HasValue && p.Longitude.HasValue)
-          return $"{p.Longitude.Value},{p.Latitude.Value}";
-        else
+          result += string.Join(",", p.BoundingBox.Select(d => d.ToString()));
+        if (p.Latitude.HasValue && p.Longitude.HasValue)
+          result += $"{p.Longitude.Value},{p.Latitude.Value}";
+        if (string.IsNullOrEmpty(result))
           return p.Names.FirstOrDefault()?.Name.Trim() ?? Guid.NewGuid().ToString("N");
+        else
+          return result;
       }))
       {
         var ordered = group
@@ -492,6 +639,15 @@ namespace GedcomParser.Model
       return _relationships[id]
         .Where(f => (f.Type & type) == type)
         .OrderBy(f => f.Type);
+    }
+
+    public IEnumerable<Individual> Siblings(Individual individual)
+    {
+      return FamilyLinks(individual, FamilyLinkType.Birth)
+        .SelectMany(l => FamilyLinks(l.Family, FamilyLinkType.Birth))
+        .OrderBy(l => l.Order)
+        .Select(l => TryGetValue(l.Individual, out Individual sibling) ? sibling : null)
+        .Where(s => s != null);
     }
 
     public IEnumerable<IndividualLink> IndividualLinks(string id, FamilyLinkType type1, FamilyLinkType type2)
