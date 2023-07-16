@@ -29,7 +29,7 @@ namespace GedcomParser
       new FamilySearchJsonLoader().Load(db, Path.Combine(Path.GetDirectoryName(path), "FamilySearch.json"));
       db.RemoveNameOnlyIndividuals();
       db.RemoveUnused();
-      //db.MakeIdsHumanReadable();
+      db.MakeIdsHumanReadable();
       db.MarkDuplicates();
       //await db.GeocodePlaces();
       new YamlWriter().Write(db, path);
@@ -50,9 +50,7 @@ namespace GedcomParser
 
     static void GenerateReport(string[] args)
     {
-      var markdown = File.ReadAllText(@"C:\Users\erdomke\source\repos\FamilyTree\Report.md");
       var graphics = new SixLaborsGraphics();
-
       var db = new Database()
       {
         BasePath = @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"
@@ -62,6 +60,10 @@ namespace GedcomParser
         yaml.Load(reader);
       var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
       new YamlLoader().Load(db, mapping);
+
+      //var countrySvg = new CountryTimeline(db, ResolvedFamily.Resolve(db.Families(), db)).Render("DomkeEricMatthe19880316");
+      //countrySvg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\Countries.svg");
+      //return;
 
       using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))
       {

@@ -190,12 +190,16 @@ namespace GedcomParser.Model
             partList.Add(road);
         }
 
-        if (partDict.TryGetValue("city", out var city)
+        if (partDict.TryGetValue("village", out var city)
           || partDict.TryGetValue("town", out city)
-          || partDict.TryGetValue("village", out city))
+          || partDict.TryGetValue("city", out city))
         {
           partList.Add(city);
         }
+
+        if (partList.Count < 1
+          && partDict.TryGetValue("county", out var county))
+          partList.Add(county);
 
         if (partDict.TryGetValue("state", out var state))
         {
@@ -205,10 +209,24 @@ namespace GedcomParser.Model
             partList.Add(state);
         }
 
-        if (country == "United States")
-          partList.Add("USA");
-        else
-          partList.Add(country);
+        switch (country)
+        {
+          case "Polska":
+            partList.Add("Poland");
+            break;
+          case "Deutschland":
+            partList.Add("Germany");
+            break;
+          case "United States":
+            partList.Add("USA");
+            break;
+          case "United Kingdom":
+            partList.Add("UK");
+            break;
+          default:
+            partList.Add(country);
+            break;
+        }
 
         displayName = string.Join(", ", partList);
         return true;
@@ -285,6 +303,8 @@ namespace GedcomParser.Model
     {
       foreach (var group in Places().GroupBy(p =>
       {
+        if (p.Attributes.TryGetValue("unique", out var unique))
+          return unique;
         var result = "";
         if (p.BoundingBox.Count > 0)
           result += string.Join(",", p.BoundingBox.Select(d => d.ToString()));
@@ -473,9 +493,13 @@ namespace GedcomParser.Model
         var addIndex = group.Skip(1).Any();
         foreach (var obj in group)
         {
-          var newId = group.Key + (addIndex ? "_" + obj.Checksum(this).Substring(0, 5) : "");
-          if (_nodes.ContainsKey(newId))
-            newId = group.Key + "_" + obj.Checksum(this).Substring(0, 6);
+          var count = 5;
+          var newId = group.Key + (addIndex ? "_" + obj.Checksum(this).Substring(0, count) : "");
+          while (addIndex && _nodes.ContainsKey(newId))
+          {
+            count++;
+            newId = group.Key + "_" + obj.Checksum(this).Substring(0, count);
+          }
           if (obj.Id.Add(newId, true))
             _nodes.Add(newId, obj);
         }

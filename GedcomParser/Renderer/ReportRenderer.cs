@@ -47,6 +47,9 @@ main {
   max-width: 7.5in;
   margin: 0 auto;
 }
+main p {
+  text-align: justify;
+}
 section {
   margin-top: 1in;
 }

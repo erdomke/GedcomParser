@@ -6,7 +6,7 @@ using System.Text;
 
 namespace GedcomParser.Model
 {
-  [DebuggerDisplay("{Type} {Date} {Place}")]
+  [DebuggerDisplay("{DebuggerDisplay,nq}")]
   public class Event : IPrimaryObject
   {
     public Identifiers Id { get; } = new Identifiers();
@@ -18,6 +18,8 @@ namespace GedcomParser.Model
     public Place Place { get; set; }
     public Organization Organization { get; set; }
     public string Description { get; set; }
+
+    internal string DebuggerDisplay => $"{TypeString ?? Type.ToString()} on {Date} at {Place?.Names.FirstOrDefault()?.Name ?? "?"}";
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();

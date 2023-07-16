@@ -6,11 +6,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="europeHigh.svg" />
     <None Remove="india2019High.svg" />
     <None Remove="usa2High.svg" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="europeHigh.svg" />
     <EmbeddedResource Include="india2019High.svg" />
     <EmbeddedResource Include="usa2High.svg" />
   </ItemGroup>

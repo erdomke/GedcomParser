@@ -97,19 +97,22 @@ namespace GedcomParser
       html.WriteEndElement();
 
       var mapRenderer = new MapRenderer();
-      if (mapRenderer.TryRender(Families, baseDirectory, out var figure))
+      if (mapRenderer.TryRender(Families, baseDirectory, out var figures))
       {
-        html.WriteStartElement("figure");
-        html.WriteAttributeString("class", "map");
-        figure.Map.WriteTo(html);
-        if (!string.IsNullOrEmpty(figure.Caption))
+        foreach (var figure in figures)
         {
-          html.WriteStartElement("figcaption");
-          html.WriteAttributeString("style", $"max-width:{Math.Max(2.5*96, figure.Width)}px;");
-          html.WriteString(figure.Caption);
+          html.WriteStartElement("figure");
+          html.WriteAttributeString("class", "map");
+          figure.Map.WriteTo(html);
+          if (!string.IsNullOrEmpty(figure.Caption))
+          {
+            html.WriteStartElement("figcaption");
+            html.WriteAttributeString("style", $"max-width:{Math.Max(2.5*96, figure.Width)}px;");
+            html.WriteString(figure.Caption);
+            html.WriteEndElement();
+          }
           html.WriteEndElement();
         }
-        html.WriteEndElement();
       }
 
       var timelineRenderer = new TimelineRenderer()

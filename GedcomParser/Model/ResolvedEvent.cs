@@ -1,12 +1,9 @@
-﻿using Microsoft.VisualBasic;
-using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Text;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace GedcomParser.Model
 {
+  [DebuggerDisplay("{Event.DebuggerDisplay,nq}")]
   internal class ResolvedEvent
   {
     public List<Individual> Primary { get; } = new List<Individual>();

@@ -16,7 +16,7 @@ namespace GedcomParser
 
     static MapRenderer()
     {
-      var maps = new[] { "usa2High.svg", "india2019High.svg" };
+      var maps = new[] { "usa2High.svg", "india2019High.svg", "europeHigh.svg" };
       _maps = maps.Select(m =>
       {
         using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("GedcomParser." + m))
@@ -25,7 +25,7 @@ namespace GedcomParser
       .ToList();
     }
 
-    public bool TryRender(IEnumerable<ResolvedFamily> families, string baseDirectory, out MapFigure figure)
+    public bool TryRender(IEnumerable<ResolvedFamily> families, string baseDirectory, out IReadOnlyList<MapFigure> figures)
     {
       var places = families
         .SelectMany(f => f.Events)
@@ -39,10 +39,11 @@ namespace GedcomParser
         .Select(e => e.Event.Place)
         .Where(p => p != null)
         .ToList();
-      figure = _maps
+      figures = _maps
         .Select(m => m.TryRenderPlaces(places, out var map) ? map : null)
-        .FirstOrDefault(m => m != null);
-      return figure != null;
+        .Where(m => m != null)
+        .ToList();
+      return figures.Count > 0;
     }
 
     private class MercatorMap

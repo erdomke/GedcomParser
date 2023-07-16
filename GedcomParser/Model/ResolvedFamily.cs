@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 namespace GedcomParser.Model
 {
+  [DebuggerDisplay("{Id,nq}")]
   internal class ResolvedFamily
   {
     public Identifiers Id => Family.Id;

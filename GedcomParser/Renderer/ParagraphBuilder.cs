@@ -224,6 +224,18 @@ namespace GedcomParser.Renderer
         AddPlace(html, ev.Event, "from");
         AddDate(html, ev.Event.Date, includeDate);
       }
+      else if (ev.Event.Type == EventType.MilitaryService)
+      {
+        AddNames(html, ev.Primary, NameForm.AutoPronounUpper, ev.Event.Date);
+        SetSubject(ev.Primary, false);
+        html.WriteString(" served in the ");
+        if (ev.Event.Attributes.TryGetValue("Military", out var military))
+          html.WriteString(military);
+        else
+          html.WriteString("military");
+        AddPlace(html, ev.Event, "from");
+        AddDate(html, ev.Event.Date, includeDate);
+      }
       else if (ev.Event.Type == EventType.Occupation)
       {
         AddNames(html, ev.Primary, NameForm.AutoPronounUpper, default);
