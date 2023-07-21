@@ -194,7 +194,7 @@ namespace GedcomParser
     {
       html.WriteStartSection(this);
       var svg = Render();
-      svg.SetAttributeValue("style", "max-width:7.5in;max-height:9.3in");
+      svg.SetAttributeValue("style", "max-width:7.5in;max-height:9in");
       svg.WriteTo(html);
       html.WriteEndElement();
     }

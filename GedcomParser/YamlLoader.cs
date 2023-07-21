@@ -566,6 +566,9 @@ namespace GedcomParser
           case "description":
             media.Description = (string)property.Value;
             break;
+          case "content":
+            media.Content = (string)property.Value;
+            break;
           case "mimetype":
             media.MimeType = (string)property.Value;
             break;

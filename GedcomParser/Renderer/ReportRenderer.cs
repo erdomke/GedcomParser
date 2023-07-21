@@ -108,7 +108,33 @@ sup.cite {
 
 article {
   background: #eee;
+}
+
+@media screen {
+  .pagedjs_page {
+    border: 1px solid #ccc !important;
+  }
+}
+
+@media print {
+  @page {
+    size: letter;
+    margin: 0.75in 0.5in;
+  }
+  @page:left {
+    @bottom-left {
+      content: counter(page);
+    }
+  }
+  @page:right {
+    @bottom-right {
+      content: counter(page);
+    }
+  }
 }");
+      html.WriteStartElement("script");
+      html.WriteAttributeString("src", "https://unpkg.com/pagedjs/dist/paged.polyfill.js");
+      html.WriteEndElement();
       html.WriteEndElement();
       html.WriteStartElement("body");
       html.WriteStartElement("main");

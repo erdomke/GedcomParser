@@ -33,7 +33,7 @@ namespace GedcomParser
       db.MarkDuplicates();
       //await db.GeocodePlaces();
       new YamlWriter().Write(db, path);
-      foreach (var root in new[] { "GKG3-ZSQ", "GSQQ-BFS", "LTGZ-RCB", "27SV-8MM", "LV44-WQL", "G9PN-WBQ" })
+      foreach (var root in new[] { "G97R-YNT", "GKG3-ZSQ", "GSQQ-BFS", "LV44-WQL", "G9PN-WBQ" })
       {
         var renderer = new AncestorRenderer(db, root)
         {

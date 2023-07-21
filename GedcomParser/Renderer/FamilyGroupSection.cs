@@ -163,14 +163,14 @@ namespace GedcomParser
     {
       var articles = media
         .Where(m => string.IsNullOrEmpty(m.Src)
-          && !string.IsNullOrEmpty(m.Description)
+          && (!string.IsNullOrEmpty(m.Description) || !string.IsNullOrEmpty(m.Content))
           && !(m.Attributes.TryGetValue("hidden", out var hidden) && hidden == "true"))
         .OrderBy(m => m.TopicDate)
         .ToList();
       foreach (var article in articles)
       {
         html.WriteStartElement("article");
-        html.WriteRaw(Markdig.Markdown.ToHtml(article.Description));
+        html.WriteRaw(Markdig.Markdown.ToHtml(article.Content ?? article.Description));
         html.WriteEndElement();
       }
 
@@ -400,7 +400,7 @@ namespace GedcomParser
           html.WriteAttributeString("style", style);
         if (prefixSuffix?.EndsWith(" ") == true)
           html.WriteString(prefixSuffix);
-        if (media.Date.HasValue)
+        if (media.Date.HasValue && media.Date.Start.Certainty == DateCertainty.Known)
         {
           html.WriteStartElement("time");
           html.WriteString(media.Date.ToString("yyyy MMM d"));

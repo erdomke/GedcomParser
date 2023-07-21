@@ -1,7 +1,5 @@
 ﻿using GedcomParser.Model;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -108,11 +106,10 @@ namespace GedcomParser
             individual.Sex = Enum.Parse<Sex>(property.Value.GetString(), true);
             break;
           case "lifeSketch":
-            var sketchMedia = new Media();
-            sketchMedia.Notes.Add(new Note()
+            var sketchMedia = new Media()
             {
-              Text = property.Value.GetProperty("details").GetProperty("text").GetString()
-            });
+              Content = property.Value.GetProperty("details").GetProperty("text").GetString()
+            };
             individual.Media.Add(sketchMedia);
             break;
           case "nameConclusion":
@@ -138,10 +135,35 @@ namespace GedcomParser
           case "portraitUrl":
             if (!string.IsNullOrEmpty(property.Value.GetString()))
             {
-              individual.Media.Add(new Media()
+              individual.Picture = new Media()
               {
                 Src = property.Value.GetString()
-              });
+              };
+            }
+            break;
+          case "memories":
+            foreach (var memory in property.Value.EnumerateArray())
+            {
+              if (memory.TryGetProperty("url", out var urlProp))
+              {
+                var media = new Media()
+                {
+                  Src = urlProp.GetString()
+                };
+                if (memory.TryGetProperty("mimeType", out var mimeTypeProp))
+                  media.MimeType = mimeTypeProp.GetString();
+                if (memory.TryGetProperty("height", out var heightProp)
+                  && memory.TryGetProperty("width", out var widthProp))
+                {
+                  media.Height = heightProp.GetInt32();
+                  media.Width = widthProp.GetInt32();
+                }
+                if ((memory.TryGetProperty("description", out var titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
+                  || (memory.TryGetProperty("title", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
+                  || (memory.TryGetProperty("originalFilename", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString())))
+                  media.Description = titleProp.GetString();
+                individual.Media.Add(media);
+              }
             }
             break;
         }
@@ -261,10 +283,13 @@ namespace GedcomParser
       if (element.TryGetProperty("justification", out var justification)
         && !string.IsNullOrEmpty(justification.GetString()))
       {
-        if (Uri.TryCreate(justification.GetString(), UriKind.Absolute, out var uri))
-          eventObj.Links.Add(new Link() { Url = uri });
-        else
-          eventObj.Notes.Add(new Note() { Text = justification.GetString() });
+        if (justification.GetString() != "GEDCOM data")
+        {
+          if (Uri.TryCreate(justification.GetString(), UriKind.Absolute, out var uri))
+            eventObj.Links.Add(new Link() { Url = uri });
+          else
+            eventObj.Notes.Add(new Note() { Text = justification.GetString() });
+        }
       }
       return eventObj;
     }

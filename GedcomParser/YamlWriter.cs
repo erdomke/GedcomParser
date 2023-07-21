@@ -447,6 +447,13 @@ namespace GedcomParser
           scalar.Style = YamlDotNet.Core.ScalarStyle.Literal;
         mediaNode.Add("description", scalar);
       }
+      if (!string.IsNullOrEmpty(media.Content))
+      {
+        var scalar = new YamlScalarNode(media.Content);
+        if (media.Content.IndexOf('\n') >= 0)
+          scalar.Style = YamlDotNet.Core.ScalarStyle.Literal;
+        mediaNode.Add("content", scalar);
+      }
       if (!string.IsNullOrEmpty(media.MimeType))
         mediaNode.Add("mimetype", media.MimeType);
       if (media.Date.HasValue)

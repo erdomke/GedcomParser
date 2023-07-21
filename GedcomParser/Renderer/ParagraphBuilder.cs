@@ -51,9 +51,9 @@ namespace GedcomParser.Renderer
         AddNames(html, births.First().Secondary, NameForm.AutoName, births.Count > 1 ? default : births.First().Event.Date);
         SetSubject(births.First().Secondary, true);
         if (births.Any(e => e.Event.Type == EventType.Adoption))
-          html.WriteString(" adopted ");
+          html.WriteString(" adopted at least ");
         else
-          html.WriteString(" gave birth to ");
+          html.WriteString(" gave birth to at least ");
         
         html.WriteString(ChildWord(births.SelectMany(e => e.Primary)));
         html.WriteString(" — ");
@@ -200,10 +200,10 @@ namespace GedcomParser.Renderer
       }
       else if (ev.Event.Type == EventType.Death)
       {
-        AddNames(html, ev.Primary, NameForm.AutoName, ev.Event.Date);
+        AddNames(html, ev.Primary, NameForm.AutoName, default);
         SetSubject(ev.Primary, false);
         html.WriteString(" died");
-        AddDate(html, ev.Event.Date, includeDate);
+        AddDate(html, ev.Event.Date, includeDate, ev.Primary.First());
         if (ev.Event.Attributes.TryGetValue("Cause", out var cause))
         {
           html.WriteString(" of ");

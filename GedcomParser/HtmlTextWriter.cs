@@ -577,7 +577,13 @@ namespace GedcomParser
               else
                 WriteInternal("'");
               break;
-            case '\n': WriteInternal(_settings.NewLineChars); break;
+            case '\r':
+              _writer.Write(_settings.NewLineChars);
+              break;
+            case '\n':
+              if (i == 0 || text[i - 1] != '\r')
+                _writer.Write(_settings.NewLineChars);
+              break;
             default: WriteInternal(text[i]); break;
           }
         }
@@ -597,7 +603,7 @@ namespace GedcomParser
                 _writer.Write(_settings.NewLineChars);
                 break;
               case '\n':
-                if (i == 0 || text[i] != '\r')
+                if (i == 0 || text[i - 1] != '\r')
                   _writer.Write(_settings.NewLineChars);
                 break;
               default:
@@ -616,7 +622,13 @@ namespace GedcomParser
               case (char)0xa0: _writer.Write("&nbsp;"); break;
               case '>': _writer.Write("&gt;"); break;
               case '<': _writer.Write("&lt;"); break;
-              case '\n': _writer.Write(_settings.NewLineChars); break;
+              case '\r':
+                _writer.Write(_settings.NewLineChars);
+                break;
+              case '\n':
+                if (i == 0 || text[i - 1] != '\r')
+                  _writer.Write(_settings.NewLineChars);
+                break;
               default: _writer.Write(text[i]); break;
             }
           }
