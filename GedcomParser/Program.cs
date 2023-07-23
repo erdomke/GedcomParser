@@ -16,51 +16,86 @@ namespace GedcomParser
   {
     static async Task Main(string[] args)
     {
+      //var source = new Database()
+      //  .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml");
+      //var target = new Database()
+      //  .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      //var merge = new DatabaseMerge(source, target);
+      //merge.Add("PutnamCharlesDua19280421", "PutnamCharlesDua19280421");
+      //merge.Add("DavisShirleyJo19320207", "DavisShirleyJo19320207");
+      //merge.Add("DavisThomas18210101", "DavisThomasCape18210522");
+      //merge.Add("DomkeCarlChrist19191012", "DomkeCarlChrist19191012");
+      //merge.Add("RosenbergHelenM19230101", "RosenbergHelenMarga19230127");
+      //merge.Process();
+      //merge.Report(@"C:\Users\erdomke\source\repos\FamilyTree\MergeReport.html");
+      //target.MakeIdsHumanReadable();
+      //target.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree2.gen.yaml");
+      //return;
+
       //IndexDirectory.ProcessDirectory(@"C:\Users\erdomke\source\repos\FamilyTree\import"
       //  , @"C:\Users\erdomke\source\repos\FamilyTree\target"
       //  , "media");
       //return;
 
-      /*var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml";
-      var db = new Database()
-      {
-        BasePath = path
-      };
-      new FamilySearchJsonLoader().Load(db, Path.Combine(Path.GetDirectoryName(path), "FamilySearch.json"));
-      db.RemoveNameOnlyIndividuals();
-      db.RemoveUnused();
-      db.MakeIdsHumanReadable();
-      db.MarkDuplicates();
-      //await db.GeocodePlaces();
-      new YamlWriter().Write(db, path);
-      foreach (var root in new[] { "G97R-YNT", "GKG3-ZSQ", "GSQQ-BFS", "LV44-WQL", "G9PN-WBQ" })
-      {
-        var renderer = new AncestorRenderer(db, root)
-        {
-          Graphics = new SixLaborsGraphics()
-        };
-        var svg = renderer.Render();
-        svg.Save($@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch_{root}.svg");
-      }
-      return;*/
+      //var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch2.yaml";
+      //var db = new Database()
+      //  .Load(new FamilySearchJsonLoader(), Path.Combine(Path.GetDirectoryName(path), "FamilySearch.json"))
+      //  .RemoveNameOnlyIndividuals()
+      //  .RemoveUnused()
+      //  .MakeIdsHumanReadable();
+      ////await db.GeocodePlaces();
+      //db.MarkDuplicates()
+      //  .CombineConsecutiveResidenceEvents()
+      //  .MoveResidenceEventsToFamily();
+      //db.BasePath = path;
+      //db.Write(new YamlWriter(), path);
+      ///*foreach (var root in new[] { "G97R-YNT", "GKG3-ZSQ", "GSQQ-BFS", "LV44-WQL", "G9PN-WBQ" })
+      //{
+      //  var renderer = new AncestorRenderer(db, root)
+      //  {
+      //    Graphics = new SixLaborsGraphics()
+      //  };
+      //  var svg = renderer.Render();
+      //  svg.Save($@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch_{root}.svg");
+      //}*/
+      //return;
+      //RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml").Wait();
+      //return;
 
       RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);
     }
 
+    private static void MergeDbs()
+    {
+      var dbSource = new Database()
+        .Load(new FamilySearchJsonLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.json")
+        .RemoveNameOnlyIndividuals()
+        .RemoveUnused()
+        .MakeIdsHumanReadable()
+        .MarkDuplicates();
+      dbSource.Write(new YamlWriter(), Path.ChangeExtension(dbSource.BasePath, ".yaml"));
+
+      var destPath = @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml";
+      var dbDest = new Database()
+        .Load(new YamlLoader(), destPath);
+      
+      foreach (var hasId in dbSource.GetValues<IHasId>()
+        .Where(o => !dbDest.ContainsId(o.Id.Primary)))
+        dbDest.Add(hasId);
+      foreach (var link in dbSource.FamilyLinks())
+        dbDest.Add(link);
+
+      dbDest.Write(new YamlWriter(), destPath);
+    }
+
     static void GenerateReport(string[] args)
     {
       var graphics = new SixLaborsGraphics();
-      var db = new Database()
-      {
-        BasePath = @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml"
-      };
-      var yaml = new YamlStream();
-      using (var reader = new StreamReader(db.BasePath))
-        yaml.Load(reader);
-      var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
-      new YamlLoader().Load(db, mapping);
 
+      var db = new Database()
+        .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      
       //var countrySvg = new CountryTimeline(db, ResolvedFamily.Resolve(db.Families(), db)).Render("DomkeEricMatthe19880316");
       //countrySvg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\Countries.svg");
       //return;
@@ -81,15 +116,12 @@ namespace GedcomParser
 
     static async Task RoundTrip(string path)
     {
-      var db = new Database();
-      var yaml = new YamlStream();
-      using (var reader = new StreamReader(path))
-        yaml.Load(reader);
-      var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
-      new YamlLoader().Load(db, mapping);
+      var db = new Database()
+        .Load(new YamlLoader(), path)
+        .CombineConsecutiveResidenceEvents()
+        .MoveResidenceEventsToFamily();
       //db.MakeIdsHumanReadable();
-      db.MoveResidenceEventsToFamily();
-      db.CombineConsecutiveResidenceEvents();
+      
       
       var graphics = new SystemDrawingGraphics();
       var baseDir = Path.GetDirectoryName(path);
@@ -108,18 +140,25 @@ namespace GedcomParser
       {
         try
         {
-          using (var stream = File.OpenRead(Path.Combine(baseDir, media.Src)))
+          if (media.Src.StartsWith("http:") || media.Src.StartsWith("https:"))
           {
-            var size = graphics.MeasureImage(stream);
-            media.Width = size.Width;
-            media.Height = size.Height;
+            // Do nothing
+          }
+          else
+          {
+            using (var stream = File.OpenRead(Path.Combine(baseDir, media.Src)))
+            {
+              var size = graphics.MeasureImage(stream);
+              media.Width = size.Width;
+              media.Height = size.Height;
+            }
           }
         }
         catch (Exception) { }
       }
 
-      await db.GeocodePlaces();
-      new YamlWriter().Write(db, path);
+      //await db.GeocodePlaces();
+      db.Write(new YamlWriter(), path);
     }
 
     static void Main_Merge(string[] args)
@@ -133,14 +172,14 @@ namespace GedcomParser
       yaml2.Load(new StreamReader(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree_Ancestry.gen.yaml"));
       
       new YamlLoader().Load(db, mapping, new[] { (YamlMappingNode)yaml2.Documents[0].RootNode });
-      new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      db.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
     }
 
     static void Main_Convert(string[] args)
     {
-      var db = new Database();
-      new GedcomLoader().Load(db, GStructure.Load(@"C:\Users\erdomke\Downloads\D Family Tree(3).ged"));
-      db.MakeIdsHumanReadable();
+      var db = new Database()
+        .Load(new GedcomLoader(), @"C:\Users\erdomke\Downloads\D Family Tree(3).ged")
+        .MakeIdsHumanReadable();
 
       var mediaRoot = @"C:\Users\erdomke\Documents\Gramps\Ancestry\";
       using (var doc = JsonDocument.Parse(File.ReadAllText(mediaRoot + "index.json")))
@@ -161,12 +200,12 @@ namespace GedcomParser
             media.Src = mediaRoot + path;
         }
       }
-      new YamlWriter().Write(db, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree_Ancestry.gen.yaml");
+      db.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree_Ancestry.gen.yaml");
 
-      var db2 = new Database();
-      new GrampsXmlLoader().Load(db2, XElement.Load(@"C:\Users\erdomke\Downloads\Gramps_2023-05-09.gramps"));
-      db2.MakeIdsHumanReadable();
-      new YamlWriter().Write(db2, @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      var db2 = new Database()
+        .Load(new GrampsXmlLoader(), @"C:\Users\erdomke\Downloads\Gramps_2023-05-09.gramps")
+        .MakeIdsHumanReadable()
+        .Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
     }
 
     //static void RenderFamilyHtml(string[] args)

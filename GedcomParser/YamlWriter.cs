@@ -8,14 +8,8 @@ using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
 {
-  public class YamlWriter
+  public class YamlWriter : IDbWriter
   {
-    public void Write(Database db, string path)
-    {
-      using (var writer = new StreamWriter(path))
-        new YamlStream(Write(db)).Save(writer, false);
-    }
-
     public YamlDocument Write(Database db)
     {
       var root = new YamlMappingNode();
@@ -70,7 +64,7 @@ namespace GedcomParser
       return value;
     }
 
-    private YamlMappingNode Visit(Individual individual)
+    public YamlMappingNode Visit(Individual individual)
     {
       var node = new YamlMappingNode();
       if (individual.Names.Count == 1)
@@ -84,14 +78,27 @@ namespace GedcomParser
       if (individual.Picture != null)
         node.Add("picture", Media(individual.Picture));
       if (individual.Events.Count > 0)
-        node.Add("events", new YamlSequenceNode(individual.Events.Select(Visit)));
+        node.Add("events", new YamlSequenceNode(individual.Events
+          .OrderBy(e =>
+          {
+            if (e.Type == EventType.Birth)
+              return 0;
+            if (e.Type == EventType.Death)
+              return 10;
+            if (e.Type == EventType.Burial
+              || e.Type == EventType.Probate)
+              return 11;
+            return 5;
+          })
+          .ThenBy(e => e.Date.ToString("s"))
+          .Select(Visit)));
 
       AddCommonProperties(node, individual);
 
       return node;
     }
 
-    private YamlMappingNode Visit(Family family, Database db)
+    public YamlMappingNode Visit(Family family, Database db)
     {
       var node = new YamlMappingNode();
       var parents = new YamlSequenceNode();
@@ -477,6 +484,12 @@ namespace GedcomParser
 
       AddCommonProperties(mediaNode, media);
       return mediaNode;
+    }
+
+    public void Write(Database database, Stream stream)
+    {
+      using (var writer = new StreamWriter(stream))
+        new YamlStream(Write(database)).Save(writer, false);
     }
   }
 }

@@ -1,6 +1,7 @@
 ﻿using GedcomParser.Model;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
@@ -8,7 +9,7 @@ using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
 {
-  internal class YamlLoader
+  internal class YamlLoader: IDbLoader
   {
     private Dictionary<string, YamlMappingNode> toProcess = new Dictionary<string, YamlMappingNode>();
 
@@ -591,6 +592,15 @@ namespace GedcomParser
       }
       AddCommonProperties(media, mediaNode, database);
       return media;
+    }
+
+    public void Load(Database database, Stream stream)
+    {
+      var yaml = new YamlStream();
+      using (var reader = new StreamReader(stream))
+        yaml.Load(reader);
+      var mapping = (YamlMappingNode)yaml.Documents[0].RootNode;
+      Load(database, mapping);
     }
   }
 }

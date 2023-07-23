@@ -18,6 +18,7 @@ namespace GedcomParser.Model
     public Place Place { get; set; }
     public Organization Organization { get; set; }
     public string Description { get; set; }
+    public string TypeName => TypeString ?? Type.ToString();
 
     internal string DebuggerDisplay => $"{TypeString ?? Type.ToString()} on {Date} at {Place?.Names.FirstOrDefault()?.Name ?? "?"}";
 

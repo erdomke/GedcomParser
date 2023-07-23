@@ -495,9 +495,12 @@ namespace GedcomParser.Renderer
             .Where(n => !string.IsNullOrEmpty(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
-          aliases.Remove(individual.Name.Remaining);
-          foreach (var part in individual.Name.Remaining.Split(' '))
-            aliases.Remove(part);
+          if (!string.IsNullOrEmpty(individual.Name.Remaining))
+          {
+            aliases.Remove(individual.Name.Remaining);
+            foreach (var part in individual.Name.Remaining.Split(' '))
+              aliases.Remove(part);
+          }
           if (aliases.Count > 0)
           {
             html.WriteString(" (");

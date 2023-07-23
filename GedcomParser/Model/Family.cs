@@ -23,7 +23,7 @@ namespace GedcomParser.Model
       builder.Append(Type.ToString());
       foreach (var memberName in db.FamilyLinks(this, FamilyLinkType.Other)
         .Select(l => db.TryGetValue(l.Individual, out Individual individual) ? individual.Name : default(PersonName))
-        .Where(n => n.Name.Length > 0)
+        .Where(n => n.Name?.Length > 0)
         .Distinct())
         builder.Append(memberName);
       foreach (var e in Events)

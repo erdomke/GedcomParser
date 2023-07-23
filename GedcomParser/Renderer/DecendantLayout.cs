@@ -237,7 +237,9 @@ namespace GedcomParser
         //  _imageSize = new Size(MaxImageHeight * 0.75, MaxImageHeight);
         //}
         //else
-        if (!string.IsNullOrEmpty(individual.Picture?.Src))
+        if (!string.IsNullOrEmpty(individual.Picture?.Src)
+          && !individual.Picture.Src.StartsWith("http://")
+          && !individual.Picture.Src.StartsWith("https://"))
         {
           ImagePath = Path.Combine(baseDirectory, individual.Picture.Src);
           if (individual.Picture.Width.HasValue

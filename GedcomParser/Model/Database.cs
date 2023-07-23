@@ -1,8 +1,10 @@
-﻿using System;
+﻿using Microsoft.Msagl.Layout.Layered;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using YamlDotNet.RepresentationModel;
 
@@ -13,6 +15,33 @@ namespace GedcomParser.Model
     private Dictionary<string, IHasId> _nodes = new Dictionary<string, IHasId>();
     private Lookup<string, FamilyLink> _relationships = new Lookup<string, FamilyLink>();
     private Lookup<IHasId, object> _whereUsed = new Lookup<IHasId, object>();
+
+    public Database Load(IDbLoader loader, string path)
+    {
+      using (var stream = File.OpenRead(path))
+        return Load(loader, stream);
+    }
+
+    public Database Load(IDbLoader loader, Stream stream)
+    {
+      if (stream is FileStream fileStream)
+        BasePath = fileStream.Name;
+      loader.Load(this, stream);
+      return this;
+    }
+
+    public Database Write(IDbWriter writer, string path)
+    {
+      using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+        return Write(writer, stream);
+    }
+
+    public Database Write(IDbWriter writer, Stream stream)
+    {
+      writer.Write(this, stream);
+      return this;
+    }
+
 
     public List<string> Roots { get; } = new List<string>();
 
@@ -33,7 +62,12 @@ namespace GedcomParser.Model
       _relationships.Add(link.Family, link);
     }
 
-    public void RemoveUnused()
+    public bool ContainsId(string id)
+    {
+      return _nodes.ContainsKey(id);
+    }
+
+    public Database RemoveUnused()
     {
       var individualsToRemove = Individuals()
         .Where(i => !i.Id.SelectMany(i => _relationships[i]).Any())
@@ -66,6 +100,7 @@ namespace GedcomParser.Model
         foreach (var id in item.Id)
           _nodes.Remove(id);
       }
+      return this;
     }
 
     public async Task GeocodePlaces()
@@ -73,29 +108,39 @@ namespace GedcomParser.Model
       using (var client = new HttpClient())
       {
         client.DefaultRequestHeaders.UserAgent.Add(new System.Net.Http.Headers.ProductInfoHeaderValue("erdomke-GedcomParser", "1.0.0"));
-        foreach (var place in Places()
-          .Where(p => !p.Attributes.TryGetValue("geocoded", out var geocoded) || geocoded != "true"))
+        foreach (var group in Places()
+          .Where(p => !p.Attributes.TryGetValue("geocoded", out var geocoded) || geocoded != "true")
+          .GroupBy(p => NormalizePlaceName(p.Names.First().Name), StringComparer.OrdinalIgnoreCase))
         {
-          var allPlaces = await GetMatches(client, place.Names.First().Name);
+          var allPlaces = await GetMatches(client, group.Key);
           var match = allPlaces.FirstOrDefault();
           if (match != null)
           {
-            place.Names.InsertRange(0, match.Names);
-            foreach (var attr in match.Attributes)
-              place.Attributes[attr.Key] = attr.Value;
-            place.Links.AddRange(match.Links);
-            if (match.BoundingBox.Count > 0)
+            foreach (var place in group)
             {
-              place.BoundingBox.Clear();
-              place.BoundingBox.AddRange(match.BoundingBox);
+              place.Names.InsertRange(0, match.Names);
+              foreach (var attr in match.Attributes)
+                place.Attributes[attr.Key] = attr.Value;
+              place.Links.AddRange(match.Links);
+              if (match.BoundingBox.Count > 0)
+              {
+                place.BoundingBox.Clear();
+                place.BoundingBox.AddRange(match.BoundingBox);
+              }
+              place.Latitude = match.Latitude;
+              place.Longitude = match.Longitude;
             }
-            place.Latitude = match.Latitude;
-            place.Longitude = match.Longitude;
           }
         }
       }
 
       MarkDuplicates();
+    }
+
+    private static string NormalizePlaceName(string name)
+    {
+      return Regex.Replace(Regex.Replace(name, "(( Bay)? Colony)?, British Colonial America", ", United States")
+        , "(, Prussia)?, German Empire", ", Deutschland");
     }
 
     private static async Task<IEnumerable<Place>> GetMatches(HttpClient client, string name)
@@ -190,7 +235,8 @@ namespace GedcomParser.Model
             partList.Add(road);
         }
 
-        if (partDict.TryGetValue("village", out var city)
+        if (partDict.TryGetValue("hamlet", out var city)
+          || partDict.TryGetValue("village", out city)
           || partDict.TryGetValue("town", out city)
           || partDict.TryGetValue("city", out city))
         {
@@ -299,7 +345,7 @@ namespace GedcomParser.Model
       {"Wyoming", "WY"},
     };
 
-    public void MarkDuplicates()
+    public Database MarkDuplicates()
     {
       foreach (var group in Places().GroupBy(p =>
       {
@@ -322,18 +368,20 @@ namespace GedcomParser.Model
         foreach (var place in ordered.Skip(1))
           place.DuplicateOf = ordered[0].Id.Primary;
       }
+      return this;
     }
 
-    public void MakeIdsHumanReadable()
+    public Database MakeIdsHumanReadable()
     {
       UpdateIndices(Citations());
       UpdateIndices(Families());
       UpdateIndices(Individuals());
       UpdateIndices(Organizations());
       UpdateIndices(Places());
+      return this;
     }
 
-    public void MoveResidenceEventsToFamily()
+    public Database MoveResidenceEventsToFamily()
     {
       foreach (var resolvedFamily in ResolvedFamily.Resolve(Families(), this).ToList())
       {
@@ -354,9 +402,10 @@ namespace GedcomParser.Model
           }
         }
       }
+      return this;
     }
 
-    public void RemoveNameOnlyIndividuals()
+    public Database RemoveNameOnlyIndividuals()
     {
       while (true)
       {
@@ -397,6 +446,7 @@ namespace GedcomParser.Model
         foreach (var individual in danglingChildren)
           familyParentsRemoved.UnionWith(Remove(individual));
       }
+      return this;
     }
 
     public IEnumerable<string> Remove(Individual individual)
@@ -416,7 +466,7 @@ namespace GedcomParser.Model
       return familyIds;
     }
 
-    public void CombineConsecutiveResidenceEvents()
+    public Database CombineConsecutiveResidenceEvents()
     {
       foreach (var eventParent in Families().Cast<IHasEvents>().Concat(Individuals()))
       {
@@ -441,6 +491,7 @@ namespace GedcomParser.Model
             eventParent.Events.Remove(eventObj);
         }
       }
+      return this;
     }
 
     private Event CombineEvents(IEnumerable<Event> events)
@@ -651,6 +702,13 @@ namespace GedcomParser.Model
         primary = default;
         return false;
       }
+    }
+
+    public IEnumerable<FamilyLink> FamilyLinks()
+    {
+      return _relationships
+        .SelectMany(r => r)
+        .Distinct();
     }
 
     public IEnumerable<FamilyLink> FamilyLinks(IHasId primary, FamilyLinkType type)

@@ -10,7 +10,7 @@ namespace GedcomParser.Model
   {
     private readonly HashSet<string> _ids = new HashSet<string>();
 
-    public string Primary { get; set; }
+    public string Primary { get; private set; }
 
     private string DebuggerDisplay => string.Join(", ", _ids);
 
@@ -51,6 +51,13 @@ namespace GedcomParser.Model
     public bool Contains(string identifier)
     {
       return _ids.Contains(identifier);
+    }
+
+    public void Replace(string newId)
+    {
+      _ids.Clear();
+      _ids.Add(newId);
+      Primary = newId;
     }
 
     public bool Overlaps(IEnumerable<string> identifiers)

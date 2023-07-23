@@ -8,7 +8,7 @@ using System.Xml.Linq;
 
 namespace GedcomParser
 {
-  internal class GrampsXmlLoader
+  internal class GrampsXmlLoader : IDbLoader
   {
     private static XNamespace grampsNs = "http://gramps-project.org/xml/1.7.1/";
     private Dictionary<string, Note> _importNotes = new Dictionary<string, Note>();
@@ -484,6 +484,11 @@ namespace GedcomParser
             notes.Notes.Add(note);
         }
       }
+    }
+
+    public void Load(Database database, Stream stream)
+    {
+      Load(database, XElement.Load(stream));
     }
   }
 }

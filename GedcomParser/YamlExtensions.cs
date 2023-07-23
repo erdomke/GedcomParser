@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using YamlDotNet.RepresentationModel;
 
@@ -55,6 +56,18 @@ namespace GedcomParser
       else if (node == null)
         return null;
       throw new InvalidOperationException("The node is not a scalar node.");
+    }
+
+    public static string ToYamlString(this YamlNode node)
+    {
+      var doc = new YamlDocument(node);
+      var stream = new YamlStream(doc);
+      using (var writer = new StringWriter())
+      {
+        stream.Save(writer, false);
+        writer.Flush();
+        return writer.ToString();
+      }
     }
   }
 }

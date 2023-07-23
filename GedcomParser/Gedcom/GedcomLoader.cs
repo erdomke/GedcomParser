@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Xml;
@@ -10,7 +11,7 @@ using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
 {
-  public class GedcomLoader
+  public class GedcomLoader : IDbLoader
   {
     private Dictionary<string, GStructure> _sources = new Dictionary<string, GStructure>();
     private HashSet<Citation> _citations = new HashSet<Citation>();
@@ -479,6 +480,12 @@ namespace GedcomParser
           return FamilyLinkType.Parent;
       }
       return FamilyLinkType.Other;
+    }
+
+    public void Load(Database database, Stream stream)
+    {
+      using (var reader = new StreamReader(stream))
+        Load(database, GStructure.Load(reader));
     }
 
 

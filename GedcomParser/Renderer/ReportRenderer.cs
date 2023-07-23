@@ -132,9 +132,9 @@ article {
     }
   }
 }");
-      html.WriteStartElement("script");
-      html.WriteAttributeString("src", "https://unpkg.com/pagedjs/dist/paged.polyfill.js");
-      html.WriteEndElement();
+      //html.WriteStartElement("script");
+      //html.WriteAttributeString("src", "https://unpkg.com/pagedjs/dist/paged.polyfill.js");
+      //html.WriteEndElement();
       html.WriteEndElement();
       html.WriteStartElement("body");
       html.WriteStartElement("main");

@@ -1,5 +1,6 @@
 ﻿using GedcomParser.Model;
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -7,17 +8,8 @@ using System.Text.Json;
 
 namespace GedcomParser
 {
-  internal class FamilySearchJsonLoader
+  internal class FamilySearchJsonLoader : IDbLoader
   {
-    public void Load(Database database, string path)
-    {
-      using (var stream = File.OpenRead(path))
-      using (var doc = JsonDocument.Parse(stream))
-      {
-        Load(database, doc.RootElement);
-      }
-    }
-
     public void Load(Database database, JsonElement root)
     {
       foreach (var person in root.GetProperty("people").EnumerateObject())
@@ -93,12 +85,14 @@ namespace GedcomParser
       {
         Name = new PersonName(element.GetProperty("name").GetString())
       };
+
       foreach (var property in element.EnumerateObject())
       {
         switch (property.Name)
         {
           case "birth":
           case "burial":
+          case "christening":
           case "death":
             individual.Events.Add(CreateEvent(database, property.Value));
             break;
@@ -158,10 +152,32 @@ namespace GedcomParser
                   media.Height = heightProp.GetInt32();
                   media.Width = widthProp.GetInt32();
                 }
-                if ((memory.TryGetProperty("description", out var titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
-                  || (memory.TryGetProperty("title", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
-                  || (memory.TryGetProperty("originalFilename", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString())))
-                  media.Description = titleProp.GetString();
+
+                if (memory.GetProperty("category").GetString() == "TEXT")
+                {
+                  if (memory.TryGetProperty("description", out var titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
+                    media.Content = titleProp.GetString();
+                  if (memory.TryGetProperty("title", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
+                    media.Description = titleProp.GetString();
+                }
+                else
+                {
+                  if ((memory.TryGetProperty("description", out var titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
+                    || (memory.TryGetProperty("title", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString()))
+                    || (memory.TryGetProperty("originalFilename", out titleProp) && !string.IsNullOrEmpty(titleProp.GetString())))
+                    media.Description = titleProp.GetString();
+                }
+                
+                if (memory.TryGetProperty("datesPlaces", out var datesPlaces)
+                  && datesPlaces.EnumerateArray().FirstOrDefault().ValueKind == JsonValueKind.Object)
+                {
+                  var firstDatePlace = datesPlaces.EnumerateArray().First();
+                  if (firstDatePlace.TryGetProperty("dateNormalizedText", out var dateNormalizedText)
+                    && ExtendedDateRange.TryParse(dateNormalizedText.GetString(), out var dateRange))
+                    media.Date = dateRange;
+
+                }
+
                 individual.Media.Add(media);
               }
             }
@@ -171,41 +187,74 @@ namespace GedcomParser
 
       if (!individual.Events.Any(e => e.Type == EventType.Birth || e.Type == EventType.Death))
       {
-        if (element.TryGetProperty("fullLifespan", out var lifespan)
-          || element.TryGetProperty("lifespan", out lifespan))
+        var births = new List<string>();
+        var deaths = new List<string>();
+        foreach (var property in new[] { "fullLifespan", "lifespan" } )
         {
-          var parts = lifespan.GetString().Split('-');
-          if (parts.Length == 2)
+          if (TryParseSpan(element, property, out var birth, out var death))
           {
-            if (ExtendedDateRange.TryParse(parts[0].Trim(), out var birthDate))
+            births.Add(birth);
+            deaths.Add(death);
+          }
+        }
+        
+        foreach (var birth in births)
+        {
+          if (ExtendedDateRange.TryParse(birth, out var birthDate))
+          {
+            individual.Events.Add(new Event()
             {
-              individual.Events.Add(new Event()
-              {
-                Type = EventType.Birth,
-                Date = birthDate
-              });
-            }
-            if (ExtendedDateRange.TryParse(parts[1].Trim(), out var deathDate))
+              Type = EventType.Birth,
+              Date = birthDate
+            });
+            break;
+          }
+        }
+
+        foreach (var death in deaths)
+        {
+          if (ExtendedDateRange.TryParse(death, out var deathDate))
+          {
+            individual.Events.Add(new Event()
             {
-              individual.Events.Add(new Event()
-              {
-                Type = EventType.Death,
-                Date = deathDate
-              });
-            }
-            else if (string.Equals(parts[1].Trim(), "Deceased", StringComparison.OrdinalIgnoreCase))
+              Type = EventType.Death,
+              Date = deathDate
+            });
+            break;
+          }
+          else if (string.Equals(death, "Deceased", StringComparison.OrdinalIgnoreCase))
+          {
+            individual.Events.Add(new Event()
             {
-              individual.Events.Add(new Event()
-              {
-                Type = EventType.Death
-              });
-            }
+              Type = EventType.Death
+            });
+            break;
           }
         }
       }
 
       individual.Names.Insert(0, primaryName);
       return individual;
+    }
+
+    private bool TryParseSpan(JsonElement element, string property, out string birth, out string death)
+    {
+      if (element.TryGetProperty(property, out var lifespan)
+        && lifespan.ValueKind == JsonValueKind.String
+        && !string.IsNullOrEmpty(lifespan.GetString()))
+      {
+        var parts = lifespan.GetString().Split('-', '–');
+        if (parts.Length == 2)
+        {
+          birth = parts[0].Trim();
+          death = parts[1].Trim();
+          return true;
+        }
+      }
+
+      birth = null;
+      death = null;
+      return false;
     }
 
     private IndividualName CreateName(JsonElement element)
@@ -248,7 +297,8 @@ namespace GedcomParser
     {
       var details = element.GetProperty("details");
       var eventObj = new Event();
-      var type = details.GetProperty("type").GetString()?.Replace("_", "");
+      var type = details.GetProperty("type").GetString()?.Replace("_", "")
+        ?? element.GetProperty("type").GetString()?.Replace("_", "");
       if (type == "OTHEREVENT")
         type = details.GetProperty("title").GetString();
       if (Enum.TryParse<EventType>(type ?? "", true, out var eventType))
@@ -258,8 +308,9 @@ namespace GedcomParser
       else
       {
         eventObj.Type = EventType.Generic;
-        eventObj.TypeString = details.GetProperty("title").GetString()
-          ?? CultureInfo.InvariantCulture.TextInfo.ToTitleCase(details.GetProperty("type").GetString()?.Replace("_", " ").ToLowerInvariant() ?? "");
+        eventObj.TypeString = details.GetProperty("title").GetString();
+        if (string.IsNullOrEmpty(eventObj.TypeString))
+          eventObj.TypeString = CultureInfo.InvariantCulture.TextInfo.ToTitleCase(details.GetProperty("type").GetString()?.Replace("_", " ").ToLowerInvariant() ?? "");
       }
 
       foreach (var property in details.EnumerateObject())
@@ -280,6 +331,10 @@ namespace GedcomParser
         }
       }
 
+      if (details.TryGetProperty("description", out var description)
+        && !string.IsNullOrEmpty(description.GetString()))
+        eventObj.Description = description.GetString();
+
       if (element.TryGetProperty("justification", out var justification)
         && !string.IsNullOrEmpty(justification.GetString()))
       {
@@ -296,7 +351,10 @@ namespace GedcomParser
 
     private Place GetCreatePlace(Database database, JsonElement element)
     {
-      var id = element.GetProperty("id").GetInt32().ToString();
+      var id = "0";
+      if (element.TryGetProperty("id", out var idProp)
+        || element.TryGetProperty("placeRepId", out idProp))
+        id = idProp.GetInt32().ToString();
       if (id == "0")
         return null;
       if (database.TryGetValue<Place>(id, out var place))
@@ -308,6 +366,12 @@ namespace GedcomParser
       {
         switch (property.Name)
         {
+          case "placeStandardLongitude":
+            place.Longitude = property.Value.GetDouble();
+            break;
+          case "placeStandardLatitude":
+            place.Latitude = property.Value.GetDouble();
+            break;
           case "geoCode":
             if (property.Value.ValueKind == JsonValueKind.Object)
             {
@@ -315,6 +379,7 @@ namespace GedcomParser
               place.Longitude = property.Value.GetProperty("longitude").GetDouble();
             }
             break;
+          case "placeNormalizedText":
           case "normalizedText":
             place.Names.Add(new PlaceName()
             {
@@ -324,6 +389,14 @@ namespace GedcomParser
         }
       }
       return place;
+    }
+
+    public void Load(Database database, Stream stream)
+    {
+      using (var doc = JsonDocument.Parse(stream))
+      {
+        Load(database, doc.RootElement);
+      }
     }
   }
 }
