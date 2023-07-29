@@ -24,7 +24,8 @@ namespace GedcomParser
         {
           if ((string)group.Key == "roots")
           {
-            database.Roots.AddRange(group.Value.EnumerateArray().Select(n => (string)n));
+            database.Roots.AddRange(group.Value.EnumerateArray()
+              .Select(n => n.Item("$ref").String().Split('/').Last()));
           }
           else if ((string)group.Key == "groups")
           {
@@ -33,9 +34,13 @@ namespace GedcomParser
               database.Groups.Add(new FamilyGroup()
               {
                 Title = familyGroup.Item("title").String(),
-                Description = familyGroup.Item("description").String(),
-                Ids = familyGroup.Item("families").EnumerateArray().Select(e => (string)e).ToList()
-              });
+                Type = Enum.Parse<FamilyGroupType>(familyGroup.Item("type").String() ?? FamilyGroupType.Descendants.ToString(), true),
+                TopicDate = ExtendedDateTime.TryParse(familyGroup.Item("topic_date").String() ?? "", out var date) ? date : default,
+                Ids = familyGroup.Item("ids").EnumerateArray()
+                  .Select(n => n.Item("$ref").String().Split('/').Last())
+                  .ToList(),
+                Content = familyGroup.Item("content").String()
+              });;
             }
           }
           else

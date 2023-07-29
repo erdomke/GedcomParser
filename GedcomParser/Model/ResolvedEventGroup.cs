@@ -16,6 +16,13 @@ namespace GedcomParser.Model
     public static IList<ResolvedEventGroup> Group(IEnumerable<ResolvedEvent> events)
     {
       var result = events
+        .Where(e => (e.Event.Type != EventType.Generic
+            || e.Event.TypeName == "Met"
+            || e.Event.TypeName == "Diagnosis")
+          && e.Event.Type != EventType.Census
+          && e.Event.Type != EventType.Probate
+          && e.Event.Type != EventType.Will
+          && !(e.Event.Type == EventType.Residence && e.Event.Place == null))
         .GroupBy(e =>
         {
           if (e.Event.Type == EventType.Birth)

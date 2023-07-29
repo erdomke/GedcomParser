@@ -147,7 +147,22 @@ namespace GedcomParser.Model
     {
       Console.WriteLine("Geocoding: " + name);
       var url = "https://nominatim.openstreetmap.org/search?format=geojson&addressdetails=1&extratags=1&q=" + Uri.EscapeDataString(name);
-      var jsonString = await client.GetStringAsync(url);
+      var jsonString = default(string);
+      var maxRetries = 3;
+      for (var i = 0; i < maxRetries; i++)
+      {
+        var resp = await client.GetAsync(url);
+        if (resp.IsSuccessStatusCode)
+        {
+          jsonString = await resp.Content.ReadAsStringAsync();
+          break;
+        }
+        else if (i + 1 >= maxRetries)
+        {
+          resp.EnsureSuccessStatusCode();
+        }
+        await Task.Delay(TimeSpan.FromSeconds(3));
+      }
       var yaml = new YamlStream();
       using (var reader = new StringReader(jsonString))
         yaml.Load(reader);
@@ -173,7 +188,6 @@ namespace GedcomParser.Model
               case "suburb":
               case "country_code":
               case "state_district":
-              case "boundary":
               case "ISO3166-2-lvl4":
               case "ISO3166-2-lvl5":
               case "ISO3166-2-lvl6":
@@ -238,7 +252,8 @@ namespace GedcomParser.Model
         if (partDict.TryGetValue("hamlet", out var city)
           || partDict.TryGetValue("village", out city)
           || partDict.TryGetValue("town", out city)
-          || partDict.TryGetValue("city", out city))
+          || partDict.TryGetValue("city", out city)
+          || partDict.TryGetValue("municipality", out city))
         {
           partList.Add(city);
         }

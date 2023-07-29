@@ -1,4 +1,5 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using Markdig;
 using System;
 using System.Collections.Generic;
@@ -17,19 +18,22 @@ namespace GedcomParser
     static async Task Main(string[] args)
     {
       //var source = new Database()
-      //  .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml");
+      //  .Load(new FamilySearchJsonLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch2.json")
+      //  .CombineConsecutiveResidenceEvents()
+      //  .MoveResidenceEventsToFamily();
+      //await source.GeocodePlaces();
       //var target = new Database()
       //  .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
       //var merge = new DatabaseMerge(source, target);
-      //merge.Add("PutnamCharlesDua19280421", "PutnamCharlesDua19280421");
-      //merge.Add("DavisShirleyJo19320207", "DavisShirleyJo19320207");
-      //merge.Add("DavisThomas18210101", "DavisThomasCape18210522");
-      //merge.Add("DomkeCarlChrist19191012", "DomkeCarlChrist19191012");
-      //merge.Add("RosenbergHelenM19230101", "RosenbergHelenMarga19230127");
+      //merge.Add("L27Y-ZKF", "PutnamThomas16140307");
+      ////merge.Add("DavisShirleyJo19320207", "DavisShirleyJo19320207");
+      ////merge.Add("DavisThomas18210101", "DavisThomasCape18210522");
+      ////merge.Add("DomkeCarlChrist19191012", "DomkeCarlChrist19191012");
+      ////merge.Add("RosenbergHelenM19230101", "RosenbergHelenMarga19230127");
       //merge.Process();
-      //merge.Report(@"C:\Users\erdomke\source\repos\FamilyTree\MergeReport.html");
+      //merge.Report(@"C:\Users\erdomke\source\repos\FamilyTree\MergeReport2.html");
       //target.MakeIdsHumanReadable();
-      //target.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree2.gen.yaml");
+      //target.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
       //return;
 
       //IndexDirectory.ProcessDirectory(@"C:\Users\erdomke\source\repos\FamilyTree\import"
@@ -62,7 +66,7 @@ namespace GedcomParser
       //RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml").Wait();
       //return;
 
-      RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
+      //RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);
     }
 
@@ -100,17 +104,22 @@ namespace GedcomParser
       //countrySvg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\Countries.svg");
       //return;
 
-      using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))
-      {
-        var report = new ReportRenderer(db, graphics);
-        report.Write(writer);
-      }
-      
-      var renderer = new AncestorRenderer(db, "DomkeEricMatthe19880316")
+      //using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))
+      //{
+      //  var report = new ReportRenderer(db, graphics);
+      //  report.Write(writer);
+      //}
+
+      //var renderer = new AncestorRenderer(db, "DomkeEricMatthe19880316")
+      //{
+      //  Graphics = graphics
+      //};
+      //var svg = renderer.Render();
+      var renderer = new AncestorRenderer2()
       {
         Graphics = graphics
       };
-      var svg = renderer.Render();
+      var svg = renderer.Render(db, "DomkeEricMatthe19880316");
       svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
     }
 

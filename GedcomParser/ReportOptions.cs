@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using GedcomParser.Model;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using YamlDotNet.RepresentationModel;
@@ -42,12 +43,5 @@ namespace GedcomParser
       }
       return result;
     }
-  }
-
-  public class FamilyGroup
-  {
-    public string Title { get; set; }
-    public string Description { get; set; }
-    public IEnumerable<string> Ids { get; set; }
   }
 }

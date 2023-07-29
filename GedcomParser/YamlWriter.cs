@@ -1,4 +1,5 @@
-﻿using GedcomParser.Model;
+﻿using ExCSS;
+using GedcomParser.Model;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,7 +19,10 @@ namespace GedcomParser
         .Where(r => !string.IsNullOrEmpty(r))
         .ToList();
       if (rootPeople.Count > 0)
-        root.Add("roots", new YamlSequenceNode(rootPeople.Select(r => new YamlScalarNode(r))));
+        root.Add("roots", new YamlSequenceNode(rootPeople.Select(r => new YamlMappingNode()
+        {
+          { "$ref", "#/people/" + r }
+        })));
       if (db.Groups.Count > 0)
       {
         root.Add("groups", new YamlSequenceNode(db.Groups.Select(g =>
@@ -26,14 +30,26 @@ namespace GedcomParser
           var group = new YamlMappingNode();
           if (!string.IsNullOrEmpty(g.Title))
             group.Add("title", g.Title);
-          if (!string.IsNullOrEmpty(g.Description))
-            group.Add("description", g.Description);
-          var familyIds = g.Ids
-            .Select(f => db.TryGetValue(f, out Family family) ? family.Id.Primary : null)
+          group.Add("type", g.Type.ToString());
+          if (g.TopicDate.HasValue)
+            group.Add("topic_date", g.TopicDate.ToString("s"));
+          var ids = g.Ids
+            .Select(f => db.TryGetValue(f, out IHasId hasId) && TryGetRefPath(hasId, out var refPath) ? refPath : null)
             .Where(f => !string.IsNullOrEmpty(f))
             .ToList();
-          if (familyIds.Count > 0)
-            group.Add("families", new YamlSequenceNode(familyIds.Select(f => new YamlScalarNode(f))));
+          if (ids.Count > 0)
+            group.Add("ids", new YamlSequenceNode(ids
+              .Select(i => new YamlMappingNode()
+              {
+                { "$ref", i }
+              })));
+          if (!string.IsNullOrEmpty(g.Content))
+          {
+            var scalar = new YamlScalarNode(g.Content);
+            if (g.Content.IndexOf('\n') >= 0)
+              scalar.Style = YamlDotNet.Core.ScalarStyle.Literal;
+            group.Add("content", scalar);
+          }
           return group;
         })));
       }
@@ -43,6 +59,23 @@ namespace GedcomParser
       root.Add("places", BuildListingById(db.Places(), Visit, "places"));
       root.Add("citations", BuildListingById(db.Citations(), Visit, "citations"));
       return new YamlDocument(root);
+    }
+
+    private bool TryGetRefPath(IHasId hasId, out string refPath)
+    {
+      if (hasId is Individual)
+        refPath = "#/people/" + hasId.Id.Primary;
+      else if (hasId is Family)
+        refPath = "#/families/" + hasId.Id.Primary;
+      else if (hasId is Organization)
+        refPath = "#/organizations/" + hasId.Id.Primary;
+      else if (hasId is Place)
+        refPath = "#/places/" + hasId.Id.Primary;
+      else if (hasId is Citation)
+        refPath = "#/citations/" + hasId.Id.Primary;
+      else
+        refPath = null;
+      return refPath != null;
     }
 
     private YamlMappingNode BuildListingById<T>(IEnumerable<T> objects, Func<T, YamlMappingNode> visit, string rootName) where T : IHasId

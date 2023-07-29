@@ -141,11 +141,11 @@ article {
       
       var personIndex = new PersonIndexSection();
       var sourceList = new SourceListSection(Families);
-      var sections = FamilyGroupSection
+      var sections = DescendentFamilySection
         .Create(Families, Database.Groups, sourceList)
         .OfType<ISection>()
         .ToList();
-      foreach (var section in sections.OfType<FamilyGroupSection>())
+      foreach (var section in sections.OfType<DescendentFamilySection>())
       {
         foreach (var individual in section.Families
           .SelectMany(f => f.Members.Select(m => m.Individual))
@@ -154,9 +154,19 @@ article {
           personIndex.Add(individual, section);
         }
       }
+      foreach (var section in sections.OfType<AncestorFamilySection>())
+      {
+        foreach (var individual in section.Groups
+          .SelectMany(g => g.Families)
+          .SelectMany(f => f.Members.Select(m => m.Individual))
+          .Distinct())
+        {
+          personIndex.Add(individual, section);
+        }
+      }
 
       var ancestors = Database.Roots
-        .Select(r => new AncestorRenderer(Database, r, 9)
+        .Select(r => new AncestorRenderer(Database, r, 8)
         {
           Graphics = Graphics
         })
@@ -165,7 +175,7 @@ article {
       foreach (var ancestor in Enumerable.Reverse(ancestors))
       {
         personIndex.Add(ancestor.Individual, ancestor);
-        var idx = sections.FindIndex(s => s is FamilyGroupSection family && family.Families.Any(f => f.Members.Any(m => m.Individual == ancestor.Individual)));
+        var idx = sections.FindIndex(s => s is DescendentFamilySection family && family.Families.Any(f => f.Members.Any(m => m.Individual == ancestor.Individual)));
         sections.Insert(idx < 0 ? defaultIndex : idx + 1, ancestor);
       }
 

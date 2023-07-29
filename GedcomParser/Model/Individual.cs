@@ -32,7 +32,7 @@ namespace GedcomParser.Model
     {
       get
       {
-        var result = BirthDate.ToString("s") + " - ";
+        var result = BirthDate.ToString("yyyy-M-d") + " - ";
         var deathEvent = Events.FirstOrDefault(e => e.Type == EventType.Death);
         if (deathEvent == null)
         {
@@ -41,7 +41,7 @@ namespace GedcomParser.Model
         else
         {
           if (deathEvent.Date.HasValue)
-            result += deathEvent.Date.ToString("s");
+            result += deathEvent.Date.ToString("yyyy-M-d");
           else
             result += "Deceased";
         }

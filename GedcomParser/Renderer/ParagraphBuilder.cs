@@ -73,7 +73,7 @@ namespace GedcomParser.Renderer
           if (deaths.TryGetValue(birth.Primary.First().Id.Primary, out var deathEvent))
           {
             if (deathEvent.Event.Date.HasValue)
-              html.WriteString(" (died " + deathEvent.Event.Date.ToString(DateFormat) + ")");
+              html.WriteString(" (died" + RenderDateRange(deathEvent.Event.Date, null) + ")");
             else
               html.WriteString(" (deceased)");
           }
@@ -281,9 +281,15 @@ namespace GedcomParser.Renderer
             html.WriteString(" was baptised");
             placeFirst = true;
             break;
+          case EventType.Christening:
+            html.WriteString(" was christened");
+            break;
           case EventType.Confirmation:
             html.WriteString(" underwent confirmation");
             placeFirst = true;
+            break;
+          case EventType.Immigration:
+            html.WriteString(" immigrated");
             break;
           case EventType.Residence:
             html.WriteString(" resided");
@@ -389,42 +395,54 @@ namespace GedcomParser.Renderer
       }
     }
 
-    internal const string DateFormat = "yyyy MMM dd";
-
     private void AddDate(HtmlTextWriter html, ExtendedDateRange date, bool includeDate, Individual ageIndividual = null)
     {
       if (!includeDate || !date.HasValue)
         return;
 
-      string RenderDate(ExtendedDateRange date, bool start)
+      html.WriteString(RenderDateRange(date, ageIndividual));
+    }
+
+    public static string RenderDateRange(ExtendedDateRange date, Individual ageIndividual)
+    {
+      string RenderDate(ExtendedDateRange range, bool start)
       {
-        var result = (start ? date.Start : date.End).ToString(DateFormat);
+        var date = (start ? range.Start : range.End);
+        var format = "yyyy";
+        if (date.Month.HasValue)
+          format = "MMMM yyyy";
+        if (date.Day.HasValue)
+          format = "MMMM d, yyyy";
+        var result = date.ToString(format);
         if (ageIndividual != null)
-          result += GetAge(ageIndividual, date, !start);
+          result += GetAge(ageIndividual, range, !start);
         return result;
       };
+
+      if (!date.HasValue)
+        return null;
 
       if (date.Type == DateRangeType.Range)
       {
         if (date.Start.HasValue && date.End.HasValue)
-          html.WriteString(" between " + RenderDate(date, true) + " and " + RenderDate(date, false));
+          return " between " + RenderDate(date, true) + " and " + RenderDate(date, false);
         else if (date.Start.HasValue)
-          html.WriteString(" after " + RenderDate(date, true));
-        else if (date.End.HasValue)
-          html.WriteString(" before " + RenderDate(date, false));
+          return " after " + RenderDate(date, true);
+        else //if (date.End.HasValue)
+          return " before " + RenderDate(date, false);
       }
       else if (date.Type == DateRangeType.Period)
       {
         if (date.Start.HasValue && date.End.HasValue)
-          html.WriteString(" from " + RenderDate(date, true) + " to " + RenderDate(date, false));
+          return " from " + RenderDate(date, true) + " to " + RenderDate(date, false);
         else if (date.Start.HasValue)
-          html.WriteString(" from " + RenderDate(date, true));
-        else if (date.End.HasValue)
-          html.WriteString(" until " + RenderDate(date, false));
+          return " from " + RenderDate(date, true);
+        else //if (date.End.HasValue)
+          return " until " + RenderDate(date, false);
       }
       else
       {
-        html.WriteString((date.Start.Day.HasValue ? " on " : " in ") + RenderDate(date, true));
+        return (date.Start.Day.HasValue ? " on " : " in ") + RenderDate(date, true);
       }
     }
 

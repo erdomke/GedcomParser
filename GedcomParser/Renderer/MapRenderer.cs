@@ -189,6 +189,8 @@ namespace GedcomParser
             Width = newViewPort.Width
           };
 
+          const string prefix = "Family members resided in ";
+
           var subdivisions = new[] { "country", "state", "county" };
           var path = new List<string>();
           var subset = matches.Select(m => m.Place);
@@ -201,12 +203,12 @@ namespace GedcomParser
             if (groups.Count < 1)
             {
               if (path.Count > 0)
-                figure.Caption = "Locations in " + string.Join(", ", Enumerable.Reverse(path));
+                figure.Caption = prefix + string.Join(", ", Enumerable.Reverse(path));
               break;
             }
             else if (groups.Count > 1)
             {
-              figure.Caption = "Locations in " + EnglishList(groups.Select(g => g.Key).ToList());
+              figure.Caption = prefix + EnglishList(groups.Select(g => g.Key).ToList());
               if (path.Count > 0)
                 figure.Caption += ", " + string.Join(", ", Enumerable.Reverse(path));
               break;
@@ -219,7 +221,7 @@ namespace GedcomParser
           }
 
           if (string.IsNullOrEmpty(figure.Caption) && path.Count > 0)
-            figure.Caption = "Locations in " + string.Join(", ", Enumerable.Reverse(path));
+            figure.Caption = prefix + string.Join(", ", Enumerable.Reverse(path));
 
           return true;
         }

@@ -6,20 +6,28 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks.Dataflow;
 using System.Xml;
 using System.Xml.Linq;
 
 namespace GedcomParser
 {
-  internal class FamilyGroupSection : ISection
+    internal class DescendentFamilySection : IFamilySection
   {
     private SourceListSection _sourceList;
-
+    
     public string Title { get; set; }
     public List<ResolvedFamily> Families { get; } = new List<ResolvedFamily>();
     public string Id => Families.First().Id.Primary;
+    public ExtendedDateTime StartDate { get; set; }
 
-    public static IEnumerable<FamilyGroupSection> Create(IEnumerable<ResolvedFamily> resolvedFamilies, IEnumerable<FamilyGroup> groups, SourceListSection sourceList)
+    public DescendentFamilySection(string title, SourceListSection sourceList)
+    {
+      Title = title;
+      _sourceList = sourceList;
+    }
+
+    public static IEnumerable<IFamilySection> Create(IEnumerable<ResolvedFamily> resolvedFamilies, IEnumerable<FamilyGroup> groups, SourceListSection sourceList)
     {
       var xref = new Dictionary<string, ResolvedFamily>();
       foreach (var family in resolvedFamilies)
@@ -31,37 +39,79 @@ namespace GedcomParser
       var result = groups
         .Select(g =>
         {
-          var resolved = new FamilyGroupSection()
+          
+          if (g.Type == FamilyGroupType.Ancestors)
           {
-            Title = g.Title,
-            _sourceList = sourceList
-          };
-          resolved.Families.AddRange(g.Ids
-            .Select(i => xref.TryGetValue(i, out var f) ? f : null)
-            .Where(f => f != null)
-            .Distinct()
-            .OrderBy(f => f.StartDate));
-          if (string.IsNullOrEmpty(resolved.Title))
-            resolved.Title = string.Join(" + ", resolved.Families.SelectMany(f => f.Parents).Select(p => p.Name.Surname).Distinct());
-          return resolved;
+            return (IFamilySection)new AncestorFamilySection(g.Title, g.Ids, sourceList)
+            {
+              StartDate = g.TopicDate
+            };
+          }
+          else
+          {
+            var resolved = new DescendentFamilySection(g.Title, sourceList);
+            resolved.Families.AddRange(g.Ids
+              .Select(i => xref.TryGetValue(i, out var f) ? f : null)
+              .Where(f => f != null)
+              .Distinct()
+              .OrderBy(f => f.StartDate));
+            if (string.IsNullOrEmpty(resolved.Title))
+              resolved.Title = string.Join(" + ", resolved.Families.SelectMany(f => f.Parents).Select(p => p.Name.Surname).Distinct());
+            resolved.StartDate = g.TopicDate.HasValue ? g.TopicDate : resolved.Families.First().StartDate;
+            return resolved;
+          }
         })
         .ToList();
 
-      foreach (var id in result.SelectMany(g => g.Families).SelectMany(f => f.Id))
-        xref.Remove(id);
-
-      foreach (var family in xref.Values)
+      var ancestors = result.OfType<AncestorFamilySection>()
+        .SelectMany(a => a.Groups)
+        .ToList();
+      var assignedFamilies = new HashSet<string>(result
+        .OfType<DescendentFamilySection>()
+        .SelectMany(s => s.Families)
+        .Select(f => f.Id.Primary));
+      while (true)
       {
-        var resolved = new FamilyGroupSection()
+        var incomplete = ancestors.Where(a => a.NextPeople.Count > 0).ToList();
+        if (incomplete.Count < 1)
+          break;
+
+        foreach (var group in incomplete)
         {
-          Title = string.Join(" + ", family.Parents.Select(p => p.Name.Surname)),
-          _sourceList = sourceList
-        };
-        resolved.Families.Add(family);
-        result.Add(resolved);
+          var newFamilies = group.NextPeople
+            .SelectMany(i => resolvedFamilies
+              .Where(f => !assignedFamilies.Contains(f.Id.Primary)
+                && f.Members.Any(m => m.Individual.Id.Contains(i))))
+            .ToList();
+          group.Families.AddRange(newFamilies);
+          assignedFamilies.UnionWith(newFamilies.Select(f => f.Id.Primary));
+          var nextPeople = newFamilies
+            .Where(f => f.Children(FamilyLinkType.Birth).Any(i => i.Id.Intersect(group.NextPeople).Any()))
+            .SelectMany(f => f.Parents)
+            .Select(i => i.Id.Primary)
+            .ToList();
+          group.NextPeople.Clear();
+          group.NextPeople.AddRange(nextPeople);
+        }
       }
 
-      return result.OrderByDescending(g => g.Families.First().StartDate).ToList();
+      foreach (var group in ancestors)
+      {
+        var ordered = group.Families
+          .GroupBy(f => f.Members.Any(i => i.Individual.Id.Primary.Contains(group.RootPersonId)))
+          .SelectMany(g => g.Key ? g.OrderBy(f => f.StartDate) : g.OrderByDescending(f => f.StartDate))
+          .ToList();
+        group.Families.Clear();
+        group.Families.AddRange(ordered);
+      }
+      foreach (var section in result.OfType<AncestorFamilySection>())
+      {
+        section.Groups.Sort((x, y) => x.Families.First().StartDate.CompareTo(y.Families.First().StartDate) * -1);
+        if (!section.StartDate.HasValue)
+          section.StartDate = section.Groups.Min(g => g.Families.First().StartDate);
+      }
+
+      return result.OrderByDescending(g => g.StartDate).ToList();
     }
 
     public void Render(HtmlTextWriter html, ReportRenderer renderer)
@@ -91,8 +141,6 @@ namespace GedcomParser
       {
         Graphics = renderer.Graphics
       };
-      if (Title == "Raman Cousins")
-        ;
       decendantRenderer.Render(Families, baseDirectory).WriteTo(html);
       html.WriteEndElement();
 
@@ -131,10 +179,7 @@ namespace GedcomParser
 
       foreach (var family in Families)
       {
-        var allEvents = ResolvedEventGroup.Group(family.Events
-          .Where(e => e.Event.TypeString != "Arrival"
-            && e.Event.TypeString != "Departure"
-            && !(e.Event.Type == EventType.Residence && e.Event.Place == null)));
+        var allEvents = ResolvedEventGroup.Group(family.Events);
 
         paraBuilder.StartParagraph(html);
         foreach (var ev in allEvents)
@@ -159,7 +204,7 @@ namespace GedcomParser
     private const double maxHeight = 3.3 * 96;
     // 577
 
-    private void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
+    internal static void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
     {
       var articles = media
         .Where(m => string.IsNullOrEmpty(m.Src)
