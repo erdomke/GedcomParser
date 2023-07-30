@@ -19,6 +19,8 @@ namespace GedcomParser
 
     public ExtendedDateTime StartDate { get; set; }
 
+    public IEnumerable<ResolvedFamily> AllFamilies => Groups.SelectMany(g => g.Families);
+
     public AncestorFamilySection(string title, IEnumerable<string> rootIds, SourceListSection sourceList)
     {
       Title = title;
@@ -44,6 +46,8 @@ namespace GedcomParser
         html.WriteEndElement();
       }
 
+      DescendentFamilySection.RenderIntro(this, html, renderer);
+
       var baseDirectory = Path.GetDirectoryName(renderer.Database.BasePath);
 
       foreach (var group in Groups)
@@ -53,7 +57,7 @@ namespace GedcomParser
 
         html.WriteStartElement("figure");
         html.WriteAttributeString("class", "ancestors");
-        var ancestorRenderer = new AncestorRenderer(renderer.Database, group.RootPersonId)
+        var ancestorRenderer = new AncestorRenderer(group.Families, group.RootPersonId)
         {
           Graphics = renderer.Graphics
         };

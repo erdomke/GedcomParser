@@ -70,6 +70,8 @@ namespace GedcomParser.Renderer
             html.WriteString("a girl ");
           AddNames(html, birth.Primary, NameForm.All, default);
           AddDate(html, birth.Event.Date, true);
+          if (births.Count < 3 || DirectAncestors.Intersect(birth.Primary.SelectMany(i => i.Id)).Any())
+            AddPlace(html, birth.Event);
           if (deaths.TryGetValue(birth.Primary.First().Id.Primary, out var deathEvent))
           {
             if (deathEvent.Event.Date.HasValue)

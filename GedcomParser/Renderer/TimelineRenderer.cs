@@ -40,10 +40,11 @@ namespace GedcomParser.Renderer
       return events;
     }
 
-    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
+    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory, HashSet<string> directAncestors)
     {
       var lines = families
         .SelectMany(f => f.Members)
+        .Where(m => !m.Role.HasFlag(FamilyLinkType.Child) || DescendantLayout.IncludeChild(families, m.Individual, directAncestors))
         .Select(m => m.Individual)
         .Where(i => i.BirthDate.HasValue || i.DeathDate.HasValue)
         .Distinct()

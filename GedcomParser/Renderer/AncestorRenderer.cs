@@ -1,7 +1,7 @@
 ﻿using GedcomParser.Model;
-using GedcomParser.Renderer;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Xml.Linq;
 
@@ -9,185 +9,221 @@ namespace GedcomParser
 {
   internal class AncestorRenderer : ISection
   {
-    private Database _database;
-    private string _root;
-    private int _depth;
+    private Individual _root;
+    private int _maxDepth;
+    private Func<string, IEnumerable<Individual>> _getParents;
 
-    private static XNamespace svgNs = (XNamespace)"http://www.w3.org/2000/svg";
-    private const int colSpacing = 40;
-    private const int horizPadding = 2;
-
+    public Individual Individual => _root;
     public IGraphics Graphics { get; set; }
 
-    public string Title { get; }
+    public string Title { get; private set; }
 
-    public string Id { get; }
+    public string Id { get; private set; }
 
-    public Individual Individual { get; }
+    private const double verticalGap = 2;
+    private const double horizontalGap = 20;
+    private const double horizPadding = 2;
 
-    public AncestorRenderer(Database database, string root, int depth = int.MaxValue)
+    public AncestorRenderer(Database database, string root, int maxDepth = int.MaxValue)
     {
-      _database = database;
+      Initialize(database.GetValue<Individual>(root));
+      _getParents = childId => database.IndividualLinks(childId, FamilyLinkType.Birth, FamilyLinkType.Parent)
+        .Select(l => database.GetValue<Individual>(l.Individual2));
+      _maxDepth = maxDepth;
+    }
+
+    public AncestorRenderer(IEnumerable<ResolvedFamily> families, string root, int maxDepth = int.MaxValue)
+    {
+      Initialize(families.SelectMany(f => f.Members.Select(m => m.Individual))
+        .First(i => i.Id.Contains(root)));
+      _getParents = childId => families
+        .Where(f => f.Members.Any(m => m.Role.HasFlag(FamilyLinkType.Child) && m.Individual.Id.Contains(childId)))
+        .SelectMany(f => f.Parents);
+      _maxDepth = maxDepth;
+    }
+
+    private void Initialize(Individual root)
+    {
       _root = root;
-      Individual = database.GetValue<Individual>(root);
-      Id = "ancestors-" + root;
-      Title = "Ancestors of " + Individual.Name.Name;
-      _depth = depth < 1 ? int.MaxValue : depth;
+      Id = "ancestors-" + root.Id.Primary;
+      Title = "Ancestors of " + root.Name.Name;
     }
 
     public XElement Render()
     {
-      var nodes = new List<Node>
+      var shapes = new List<PersonLabel>
       {
-          new Node()
-          {
-              Id = _root,
-              Column = 0
-          }.UpdateText(_database, Graphics)
+        new PersonLabel(_root, 0, Graphics)
       };
 
-      for (var idx = 0; idx < nodes.Count; idx++)
+      for (var i = 0; i < shapes.Count; i++)
       {
-        if ((nodes[idx].Column + 1) < _depth)
-        {
-          foreach (var parent in _database
-              .IndividualLinks(nodes[idx].Id, FamilyLinkType.Birth, FamilyLinkType.Parent))
-          {
-            var newNode = new Node()
-            {
-              Id = parent.Individual2,
-              Type = parent.LinkType2,
-              Child = nodes[idx],
-              Column = nodes[idx].Column + 1
-            }.UpdateText(_database, Graphics);
-            nodes[idx].Parents.Add(newNode);
-            nodes.Add(newNode);
-          }
-        }
-      }
+        var child = shapes[i];
+        var nextColumn = child.Column + 1;
+        if (nextColumn >= _maxDepth)
+          break;
 
-      var columns = nodes
-          .GroupBy(n => n.Column)
-          .OrderBy(g => g.Key)
-          .Select(g => g.ToList())
-          .ToList();
-      var widths = columns.Select(c => c.Max(n => n.Width)).ToList();
-      for (var c = columns.Count - 1; c >= 0; c--)
-      {
-        for (var r = 0; r < columns[c].Count; r++)
+        var previousInColumn = shapes.LastOrDefault(s => s.Column == nextColumn);
+        child.Parents.AddRange(_getParents(child.Individual.Id.Primary)
+          .Select(i => new PersonLabel(i, nextColumn, Graphics)));
+        
+        if (child.Parents.Count > 0)
         {
-          var node = columns[c][r];
-          if (r > 0)
-            node.Above = columns[c][r - 1];
-          if (r < columns[c].Count - 1)
-            node.Below = columns[c][r + 1];
-
-          var minY = r == 0 ? 0 : columns[c][r - 1].Bottom;
-          node.Left = colSpacing * c + widths.Take(c).Sum();
-          if (node.Parents.Count < 1)
+          var childPreferredTop = child.PreferredParentTop;
+          var requiredTop = previousInColumn == null ? 0 : previousInColumn.Bottom + verticalGap;
+          var first = true;
+          foreach (var parent in child.Parents)
           {
-            node.Top = minY;
-          }
-          else
-          {
-            var parentY = node.Parents
-                .Select((n, i) =>
-                {
-                  if (i == 0)
-                    return n.Parents.LastOrDefault()?.Top ?? n.Top;
-                  else if (i == node.Parents.Count - 1)
-                    return n.Parents.FirstOrDefault()?.Top ?? n.Top;
-                  else
-                    return n.Top;
-                }).Average();
-            if (parentY >= minY)
+            if (first)
             {
-              node.Top = parentY;
+              parent.Top = Math.Max(requiredTop, childPreferredTop);
+              first = false;
             }
             else
             {
-              node.Top = minY;
-              var offset = minY - parentY;
-              foreach (var toAdjust in ParentTree(columns[c + 1]
-                  .SkipWhile(n => !node.Parents.Contains(n))))
-              {
-                toAdjust.Top += offset;
-              }
+              parent.Top = previousInColumn.Bottom + verticalGap;
             }
 
-            var space = node.Parents.Count == 2
-                ? node.Parents.Max(n => n.Top) - node.Parents.Min(n => n.Bottom)
-                : 0;
-            if (space >= node.Height)
+            if (previousInColumn == null)
             {
-              node.Left = node.Parents.Min(n => n.Left) - colSpacing;
+              parent.Left = shapes.Where(s => s.Column == parent.Column - 1).Max(s => s.Right) + horizontalGap;
             }
+            else
+            {
+              previousInColumn.NextInColumn = parent;
+              parent.Left = previousInColumn.Left;
+              parent.PreviousInColumn = previousInColumn;
+            }
+            parent.Child = child;
+            previousInColumn = parent;
           }
-        }
-      }
 
-      foreach (var col in columns)
-      {
-        var minX = col.Min(n => n.Left);
-        foreach (var node in col)
-          node.Left = minX;
-      }
-
-      foreach (var node in nodes)
-      {
-        if (node.Parents.Count > 0)
-        {
-          var newX = node.Parents.Min(n => n.Left);
-          if (newX > node.Right)
+          if (requiredTop > childPreferredTop)
           {
-            var rightMost = node.Right;
-            if (node.Above?.Right > rightMost
-                && Math.Abs(node.Above.Bottom - node.Top) < 10)
-              rightMost = node.Above.Right;
-            if (node.Below?.Right > rightMost
-                && Math.Abs(node.Bottom - node.Below.Top) < 10)
-              rightMost = node.Below.Right;
-            newX = rightMost + colSpacing;
+            child.UpdateTop(false);
           }
-          foreach (var parent in node.Parents)
-          {
-            parent.Left = newX;
-          }
+          shapes.AddRange(child.Parents);
         }
       }
 
-      var offsetY = nodes.Min(n => n.Top) * -1;
-      var offsetX = nodes.Min(n => n.Left) * -1;
-      if (Math.Abs(offsetY - 0) > 0.0001
-          || Math.Abs(offsetX - 0) > 0.0001)
+      // Align children based on the center of the parents' trees versus the
+      // center of the direct parents.
+      var itemsToShift = shapes
+        .Where(s => s.Parents.Count > 1
+          && s.Top > s.Parents[0].Bottom + verticalGap
+          && s.Bottom < s.Parents.Last().Top - verticalGap)
+        .ToList();
+      itemsToShift.Reverse();
+      foreach (var shape in itemsToShift)
       {
-        foreach (var node in nodes)
+        var above = shape.Parents.First().AllParentsAndSelf().OrderByDescending(s => s.Bottom).First();
+        var below = shape.Parents.Last().AllParentsAndSelf().OrderBy(s => s.Top).First();
+        if (above.Column < below.Column)
+          below = above.NextInColumn;
+        else if (below.Column < above.Column)
+          above = below.PreviousInColumn;
+        var newTop = Math.Min(
+          shape.Parents.Last().Top - verticalGap
+            , Math.Max(shape.Parents.First().Bottom + verticalGap
+              , (below.Top + above.Bottom) / 2 - shape.Height / 2));
+        shape.Top = newTop;
+        if (shape.PreviousInColumn != null
+          && shape.PreviousInColumn.Child == shape.Child
+          && shape.PreviousInColumn.Parents.Count < 1)
         {
-          node.Left += offsetX;
-          node.Top += offsetY;
+          shape.PreviousInColumn.Top = newTop - shape.PreviousInColumn.Height - verticalGap;
+          shape.Child.Top = (shape.PreviousInColumn.Bottom + shape.Top) / 2 - shape.Child.Height / 2;
         }
+        else if (shape.NextInColumn != null
+          && shape.NextInColumn.Child == shape.Child
+          && shape.NextInColumn.Parents.Count < 1)
+        {
+          shape.NextInColumn.Top = newTop + shape.Height + verticalGap;
+          shape.Child.Top = (shape.Bottom + shape.NextInColumn.Top) / 2 - shape.Child.Height / 2;
+        }
+        if (shape.Child != null && shape.Child.Parents.Count == 1)
+          shape.Child.Top = newTop;
       }
 
-      var result = new XElement(svgNs + "svg");
-      var height = nodes.Max(n => n.Bottom);
-      var width = nodes.Max(n => n.Right);
+      for (var i = 1; i < shapes.Count; i++)
+      {
+        var parentGroup = new List<PersonLabel>() { shapes[i] };
+        while ((i + 1) < shapes.Count && shapes[i+1].Child == parentGroup[0].Child)
+        {
+          i++;
+          parentGroup.Add(shapes[i]);
+        }
+
+        // Collision of lines
+        var parentTop = parentGroup.Min(p => p.Top);
+        var parentBottom = parentGroup.Max(p => p.Bottom);
+        var closestCollision = shapes
+          .Where(s => s != parentGroup[0].Child)
+          .Where(r => r.Left < parentGroup[0].Left && r.Bottom >= parentTop && r.Top <= parentBottom)
+          .OrderByDescending(r => r.Right)
+          .FirstOrDefault();
+        var furthestLeftBeforeCollision = closestCollision == null
+          ? 0
+          : closestCollision.Right + horizontalGap;
+
+        // Collision of elements
+        furthestLeftBeforeCollision = Math.Max(furthestLeftBeforeCollision, parentGroup.Max(s =>
+        {
+          var closestCollision = shapes
+              .Where(r => r.Left < s.Left && r.Bottom >= s.Top && r.Top <= s.Bottom)
+              .OrderByDescending(r => r.Right)
+              .FirstOrDefault();
+          if (closestCollision == null)
+            return 0;
+          return closestCollision.Right + horizontalGap;
+        }));
+
+        var childPosition = parentGroup[0].Child.Left + horizontalGap;
+        var newLeft = Math.Max(furthestLeftBeforeCollision, childPosition);
+        foreach (var parent in parentGroup)
+          parent.Left = newLeft;
+      }
+
+      // Overlap columns
+      /*var columnCount = shapes.Max(s => s.Column) + 1;
+      for (var i = 0; i < columnCount; i++)
+      {
+        var maxShiftBeforeCollison = shapes
+          .Where(s => s.Column <= i)
+          .Min(s =>
+          {
+            var closestCollision = shapes
+              .Where(r => r.Left > s.Left && r.Bottom >= s.Top && r.Top <= s.Bottom)
+              .OrderBy(r => r.Left)
+              .FirstOrDefault();
+            if (closestCollision == null)
+              return double.MaxValue;
+            return closestCollision.Left - s.Right - horizontalGap;
+          });
+        if (maxShiftBeforeCollison <= 0)
+          break;
+
+        var columnWidth = shapes.Where(s => s.Column == i).Max(s => s.Width);
+        var shift = Math.Min(maxShiftBeforeCollison, columnWidth) - horizontalGap;
+        if (shift > 0)
+        {
+          foreach (var shape in shapes.Where(s => s.Column > i))
+          {
+            shape.Left -= shift;
+          }
+        }
+      }*/
+
+      var result = new XElement(SvgUtil.Ns + "svg");
+      var height = shapes.Max(n => n.Bottom);
+      var width = shapes.Max(n => n.Right);
       result.SetAttributeValue("viewBox", $"0 0 {width} {height}");
       result.SetAttributeValue("width", width);
       result.SetAttributeValue("height", height);
-      foreach (var node in nodes)
-        foreach (var part in node.ToSvg())
+      foreach (var shape in shapes)
+        foreach (var part in shape.ToSvg())
           result.Add(part);
       return result;
-    }
-
-    private static IEnumerable<Node> ParentTree(IEnumerable<Node> nodes)
-    {
-      foreach (var node in nodes)
-      {
-        yield return node;
-        foreach (var parent in ParentTree(node.Parents))
-          yield return parent;
-      }
     }
 
     public void Render(HtmlTextWriter html, ReportRenderer renderer)
@@ -199,71 +235,167 @@ namespace GedcomParser
       html.WriteEndElement();
     }
 
-    private class Node : Shape
+    [DebuggerDisplay("{Individual.Name.Name}")]
+    private class PersonLabel : ISvgGraphic
     {
-      public string Id { get; set; }
-      public int Column { get; set; }
-      public FamilyLinkType Type { get; set; }
-      public Node Child { get; set; }
-      public List<Node> Parents { get; } = new List<Node>();
-      public string Name { get; set; }
-      public string Dates { get; set; }
-      public Node Above { get; set; }
-      public Node Below { get; set; }
+      private double _left;
+      private double _top;
+      private double _nameHeight;
+      private double _dateHeight;
 
-      public Node UpdateText(Database database, IGraphics graphics)
+      public Individual Individual { get; }
+      public int Column { get; }
+
+      public PersonLabel PreviousInColumn { get; set; }
+      public PersonLabel NextInColumn { get; set; }
+      public List<PersonLabel> Parents { get; } = new List<PersonLabel>();
+      public PersonLabel Child { get; set; }
+
+      public IEnumerable<PersonLabel> AllParentsAndSelf()
       {
-        var individual = database.GetValue<Individual>(Id);
-        Name = individual.Name.Name;
-        Dates = individual.DateString;
-        //if (individual.BirthDate.TryGetDiff(individual.DeathDate, out var minAge, out var maxAge))
-        //{
-        //    var age = (minAge.Years + maxAge.Years) / 2;
-        //    Dates = age.ToString() + "y, " + Dates;
-        //}
-        var style = ReportStyle.Default;
-        Width = Math.Max(graphics.MeasureText(style.FontName, style.BaseFontSize, Name).Width, graphics.MeasureText(style.FontName, style.BaseFontSize - 4, Dates).Width);
-        return this;
+        var list = new List<PersonLabel>() { this };
+        for (var i = 0; i < list.Count; i++)
+          list.AddRange(list[i].Parents);
+        return list;
       }
 
-      public override IEnumerable<XElement> ToSvg()
+      public double PreferredParentTop
+      {
+        get
+        {
+          var parentTotalHeight = Parents.Sum(p => p.Height) + (Parents.Count - 1) * verticalGap;
+          return (Bottom + Top) / 2 - parentTotalHeight / 2;
+        }
+      }
+
+      public double Left
+      {
+        get => _left;
+        set => _left = value;
+      }
+      public double Top
+      {
+        get => _top;
+        set => _top = value;
+      }
+      public double Width { get; set; }
+      public double Height { get; set; }
+      public double MidY => Top + Height / 2;
+      public double Bottom => Top + Height;
+      public double Right => Left + Width;
+
+      public PersonLabel(Individual individual, int column, IGraphics graphics)
+      {
+        Individual = individual;
+        Column = column;
+        var style = ReportStyle.Default;
+
+        var nameSize = graphics.MeasureText(style.FontName, style.BaseFontSize, Individual.Name.Name);
+        var dateSize = graphics.MeasureText(style.FontName, style.BaseFontSize - 4, Individual.DateString);
+        Width = Math.Max(nameSize.Width, dateSize.Width);
+        _nameHeight = nameSize.Height;
+        _dateHeight = dateSize.Height;
+        Height = nameSize.Height + dateSize.Height;
+      }
+
+      public void UpdateTop(bool downwardUpdate)
+      {
+        var newTop = double.MinValue;
+        if (PreviousInColumn != null)
+          newTop = Math.Max(newTop, PreviousInColumn.Bottom + verticalGap);
+        if (Parents.Count == 1)
+        {
+          if (newTop > Parents[0].Top && newTop > _top)
+            ShiftAncestors(newTop - Parents[0].Top);
+          newTop = Math.Max(newTop, Parents[0].Top);
+        }
+        else if (Parents.Count > 1)
+        {
+          var parentMidTop = Parents[0].Bottom + (Parents.Last().Top - Parents[0].Bottom) / 2 - this.Height / 2;
+          if (newTop > parentMidTop)
+          {
+            if (newTop > _top)
+              ShiftAncestors(newTop - parentMidTop);
+          }
+          else
+          {
+            newTop = parentMidTop;
+          }
+        }
+        
+        if (newTop > double.MinValue && newTop > _top)
+        {
+          _top = newTop;
+          if (NextInColumn != null)
+            NextInColumn.UpdateTop(true);
+
+          if (!downwardUpdate)
+          {
+            var curr = this;
+            while (curr.PreviousInColumn != null
+              && curr.PreviousInColumn.Child == curr.Child
+              && curr.PreviousInColumn.Parents.Count < 1)
+            {
+              var prev = curr.PreviousInColumn;
+              prev.Top = Top - prev.Height - verticalGap;
+              curr = prev;
+            }
+          }
+          if (Child != null)
+            Child.UpdateTop(false);
+        }
+      }
+
+      private void ShiftAncestors(double shift)
+      {
+        foreach (var parent in Parents)
+        {
+          parent._top += shift;
+          parent.ShiftAncestors(shift);
+        }
+        var next = Parents.LastOrDefault()?.NextInColumn;
+        if (next != null)
+          next.UpdateTop(true);
+      }
+
+      public IEnumerable<XElement> ToSvg()
       {
         var style = ReportStyle.Default;
-        yield return new XElement(svgNs + "g"
-          , new XAttribute("id", $"ans-{Id}")
+        yield return new XElement(SvgUtil.Ns + "g"
+          , new XAttribute("id", $"ans-{Individual.Id.Primary}")
           , new XAttribute("transform", $"translate({Left},{Top})")
-          , new XElement(svgNs + "text"
+          , new XElement(SvgUtil.Ns + "text"
             , new XAttribute("x", 0)
-            , new XAttribute("y", 18)
+            , new XAttribute("y", _nameHeight - 4)
             , new XAttribute("style", $"font-size:{style.BaseFontSize}px;font-family:{style.FontName}")
-            , Name)
-          , new XElement(svgNs + "text"
+            , Individual.Name.Name)
+          , new XElement(SvgUtil.Ns + "text"
             , new XAttribute("x", 0)
             , new XAttribute("y", Height - 4)
             , new XAttribute("style", $"fill:#999;font-size:{style.BaseFontSize - 4}px;font-family:{style.FontName}")
-            , Dates)
+            , Individual.DateString)
         );
         var lineStyle = "stroke:black;stroke-width:1px;fill:none";
         foreach (var parent in Parents)
         {
-          if (Math.Abs(parent.Top - Top) < 0.001)
+          if (Math.Abs(parent.Top - Top) < 0.01)
           {
-            yield return new XElement(svgNs + "path"
+            yield return new XElement(SvgUtil.Ns + "path"
               , new XAttribute("style", lineStyle)
               , new XAttribute("d", $"M {Right + horizPadding} {MidY} L {parent.Left - horizPadding} {MidY}"));
           }
-          else if (parent.Left > (Left + Width + 0.1))
+          else if (parent.Left > (Right + horizontalGap - 0.1))
           {
-            var halfway = parent.Left - colSpacing / 2;
-            yield return new XElement(svgNs + "path"
+            var halfway = parent.Left - horizontalGap / 2;
+            yield return new XElement(SvgUtil.Ns + "path"
               , new XAttribute("style", lineStyle)
               , new XAttribute("d", $"M {Right + horizPadding} {MidY} L {halfway} {MidY} L {halfway} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
           }
           else
           {
-            yield return new XElement(svgNs + "path"
+            yield return new XElement(SvgUtil.Ns + "path"
               , new XAttribute("style", lineStyle)
-              , new XAttribute("d", $"M {Left + colSpacing / 2} {(parent.Top < Top ? Top : Bottom)} L {Left + colSpacing / 2} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
+              , new XAttribute("d", $"M {parent.Left - horizontalGap / 2} {(parent.Top < Top ? Top : Bottom)} L {parent.Left - horizontalGap / 2} {parent.MidY} L {parent.Left - horizPadding} {parent.MidY}"));
 
           }
         }

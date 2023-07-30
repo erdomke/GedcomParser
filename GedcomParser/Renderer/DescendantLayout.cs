@@ -13,7 +13,7 @@ using System.Xml.Linq;
 
 namespace GedcomParser
 {
-  internal class DecendantLayout
+  internal class DescendantLayout
   {
     public IGraphics Graphics { get; set; }
 
@@ -63,13 +63,22 @@ namespace GedcomParser
       return ordered;
     }
 
-    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory)
+    internal static bool IncludeChild(IEnumerable<ResolvedFamily> families, Individual individual, HashSet<string> directAncestors)
+    {
+      return directAncestors == null
+        || directAncestors.Intersect(individual.Id).Any()
+        || !string.IsNullOrEmpty(individual.Picture?.Src)
+        || families.Any(f => f.Parents.Contains(individual));
+    }
+
+    public XElement Render(IEnumerable<ResolvedFamily> families, string baseDirectory, HashSet<string> directAncestors)
     {
       var personReference = new Dictionary<string, Person>();
       
       var graph = new GeometryGraph();
       foreach (var person in families
         .SelectMany(f => f.Members)
+        .Where(m => !m.Role.HasFlag(FamilyLinkType.Child) || IncludeChild(families, m.Individual, directAncestors))
         .Select(m => m.Individual)
         .Distinct()
         .Select(i => new Person(i, Graphics, baseDirectory))
@@ -91,7 +100,10 @@ namespace GedcomParser
           var edge = new Edge(familyNode, personReference[parent.Id.Primary].Node);
           graph.Edges.Add(edge);
         }
-        foreach (var child in family.Children(FamilyLinkType.Birth).Concat(family.Children(FamilyLinkType.Pet)).Reverse())
+        foreach (var child in family.Children(FamilyLinkType.Birth)
+          .Concat(family.Children(FamilyLinkType.Pet))
+          .Where(i => IncludeChild(families, i, directAncestors))
+          .Reverse())
         {
           var edge = new Edge(personReference[child.Id.Primary].Node, familyNode);
           graph.Edges.Add(edge);

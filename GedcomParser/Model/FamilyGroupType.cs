@@ -9,6 +9,7 @@ namespace GedcomParser.Model
   public enum FamilyGroupType
   {
     Descendants,
+    DescendantHighlights,
     Ancestors
   }
 }

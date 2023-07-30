@@ -12,6 +12,8 @@ namespace GedcomParser
 
     public string Id => "person-index";
 
+    public ILookup<Individual, ISection> Index => _personIndex;
+
     public void Add(Individual person, ISection section)
     {
       if (person.Species == Species.Human)
@@ -30,8 +32,12 @@ namespace GedcomParser
         html.WriteAttributeString("class", "person-index");
         html.WriteStartElement("div");
         html.WriteAttributeString("class", "person");
-        html.WriteElementString("strong", person.Key.Name.Surname);
-        html.WriteString((person.Key.Name.SurnameStart == 0 ? " " : ", ") + person.Key.Name.Remaining);
+        if (!string.IsNullOrEmpty(person.Key.Name.Surname))
+        {
+          html.WriteElementString("strong", person.Key.Name.Surname);
+          html.WriteString((person.Key.Name.SurnameStart == 0 ? " " : ", "));
+        }
+        html.WriteString(person.Key.Name.Remaining);
         if (person.Key.BirthDate.HasValue || person.Key.DeathDate.HasValue)
         {
           html.WriteStartElement("span");

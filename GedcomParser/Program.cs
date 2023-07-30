@@ -66,7 +66,7 @@ namespace GedcomParser
       //RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch.yaml").Wait();
       //return;
 
-      //RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
+      RoundTrip(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml").Wait();
       GenerateReport(args);
     }
 
@@ -99,27 +99,22 @@ namespace GedcomParser
 
       var db = new Database()
         .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
-      
+
       //var countrySvg = new CountryTimeline(db, ResolvedFamily.Resolve(db.Families(), db)).Render("DomkeEricMatthe19880316");
       //countrySvg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\Countries.svg");
       //return;
 
-      //using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))
-      //{
-      //  var report = new ReportRenderer(db, graphics);
-      //  report.Write(writer);
-      //}
+      using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))
+      {
+        var report = new ReportRenderer(db, graphics);
+        report.Write(writer);
+      }
 
-      //var renderer = new AncestorRenderer(db, "DomkeEricMatthe19880316")
-      //{
-      //  Graphics = graphics
-      //};
-      //var svg = renderer.Render();
-      var renderer = new AncestorRenderer2()
+      var renderer = new AncestorRenderer(db, "DomkeEricMatthe19880316")
       {
         Graphics = graphics
       };
-      var svg = renderer.Render(db, "DomkeEricMatthe19880316");
+      var svg = renderer.Render();
       svg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.svg");
     }
 

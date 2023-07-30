@@ -1,7 +1,9 @@
-﻿using System;
+﻿using Microsoft.VisualBasic;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.NetworkInformation;
 using System.Text;
 
 namespace GedcomParser.Model
@@ -32,7 +34,7 @@ namespace GedcomParser.Model
     {
       get
       {
-        var result = BirthDate.ToString("yyyy-M-d") + " - ";
+        var result = RangeString(BirthDate) + " - ";
         var deathEvent = Events.FirstOrDefault(e => e.Type == EventType.Death);
         if (deathEvent == null)
         {
@@ -41,12 +43,29 @@ namespace GedcomParser.Model
         else
         {
           if (deathEvent.Date.HasValue)
-            result += deathEvent.Date.ToString("yyyy-M-d");
+            result += RangeString(deathEvent.Date);
           else
             result += "Deceased";
         }
         return result;
       }
+    }
+
+    private const string DateFormat = "yyyy-M-d";
+
+    private string RangeString(ExtendedDateRange range)
+    {
+      if (range.Type == DateRangeType.Range
+        || range.Type == DateRangeType.Period)
+      {
+        if (range.Start.HasValue && range.End.HasValue)
+          return "(" + range.Start.ToString(DateFormat) + "," + range.End.ToString(DateFormat) + ")";
+        else if (range.Start.HasValue)
+          return ">" + range.Start.ToString(DateFormat);
+        else
+          return "<" + range.End.ToString(DateFormat);
+      }
+      return range.ToString(DateFormat);
     }
 
     public string Pronoun()

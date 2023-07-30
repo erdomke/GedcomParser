@@ -2,17 +2,15 @@
 using GedcomParser.Renderer;
 using SixLabors.ImageSharp;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Threading.Tasks.Dataflow;
 using System.Xml;
 using System.Xml.Linq;
 
 namespace GedcomParser
 {
-    internal class DescendentFamilySection : IFamilySection
+  internal class DescendentFamilySection : IFamilySection
   {
     private SourceListSection _sourceList;
     
@@ -20,6 +18,8 @@ namespace GedcomParser
     public List<ResolvedFamily> Families { get; } = new List<ResolvedFamily>();
     public string Id => Families.First().Id.Primary;
     public ExtendedDateTime StartDate { get; set; }
+    public bool HighlightsOnly { get; set; }
+    IEnumerable<ResolvedFamily> IFamilySection.AllFamilies => Families;
 
     public DescendentFamilySection(string title, SourceListSection sourceList)
     {
@@ -49,7 +49,10 @@ namespace GedcomParser
           }
           else
           {
-            var resolved = new DescendentFamilySection(g.Title, sourceList);
+            var resolved = new DescendentFamilySection(g.Title, sourceList)
+            {
+              HighlightsOnly = g.Type == FamilyGroupType.DescendantHighlights
+            };
             resolved.Families.AddRange(g.Ids
               .Select(i => xref.TryGetValue(i, out var f) ? f : null)
               .Where(f => f != null)
@@ -81,7 +84,7 @@ namespace GedcomParser
           var newFamilies = group.NextPeople
             .SelectMany(i => resolvedFamilies
               .Where(f => !assignedFamilies.Contains(f.Id.Primary)
-                && f.Members.Any(m => m.Individual.Id.Contains(i))))
+                && f.Members.Any(m => m.Individual.Id.Contains(i) && m.Role.HasFlag(FamilyLinkType.Child))))
             .ToList();
           group.Families.AddRange(newFamilies);
           assignedFamilies.UnionWith(newFamilies.Select(f => f.Id.Primary));
@@ -114,6 +117,123 @@ namespace GedcomParser
       return result.OrderByDescending(g => g.StartDate).ToList();
     }
 
+    internal static void RenderIntro(IFamilySection section, HtmlTextWriter html, ReportRenderer renderer)
+    {
+      var eventDates = section.AllFamilies
+        .SelectMany(f => f.Events)
+        .Select(e => e.Event.Date)
+        .Where(d => d.HasValue)
+        .OrderBy(d => d)
+        .ToList();
+      var startYear = eventDates[0].Start.Year;
+      var endYear = eventDates.Last().End.HasValue ? eventDates.Last().End.Year : eventDates.Last().Start.Year;
+      var crossReferencePeople = renderer.PersonIndex.Index
+        .Where(g => g.Contains(section) && g.Skip(1).Any())
+        .SelectMany(g => CreateLinks(g, section))
+        .ToList();
+      var leftPeople = crossReferencePeople
+        .Where(l => l.Left)
+        .GroupBy(l => l.Section)
+        .ToList();
+      var rightPeople = crossReferencePeople
+        .Where(l => !l.Left)
+        .GroupBy(l => l.Section)
+        .ToList();
+
+      void RenderLinks(IEnumerable<IGrouping<ISection, PersonLink>> sections)
+      {
+        foreach (var section in sections)
+        {
+          html.WriteString("See ");
+          html.WriteStartElement("a");
+          html.WriteAttributeString("href", "#" + section.Key.Id);
+          html.WriteAttributeString("style", "font-style:italic");
+          html.WriteString(section.Key.Title);
+          html.WriteEndElement();
+          html.WriteString(" for more information about");
+          var last = section.Count() - 1;
+          var i = 0;
+          foreach (var link in section)
+          {
+            if (i == 0)
+              html.WriteString(" ");
+            else if (i == last)
+              html.WriteString(i > 1 ? ", and " : " and ");
+            else
+              html.WriteString(", ");
+            html.WriteStartElement("a");
+            html.WriteAttributeString("href", "#" + link.Individual.Id.Primary);
+            html.WriteAttributeString("style", "font-weight:bold;");
+            html.WriteString(link.Individual.Name.Name);
+            html.WriteEndElement();
+            i++;
+          }
+          html.WriteString(". ");
+        }
+      }
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("class", "intro-timeline");
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("class", "intro-end");
+
+      if (leftPeople.Count > 0)
+        html.WriteString("← ");
+      if (endYear > DateTime.Now.Year - 50)
+        html.WriteString("Current");
+      else
+        html.WriteString(Decade(endYear) + "s");
+      html.WriteEndElement();
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("class", "intro-fill");
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("style", "max-width:2.75in");
+      RenderLinks(leftPeople);
+      html.WriteEndElement();
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("style", "flex:1");
+      html.WriteEndElement();
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("style", "max-width:2.75in;text-align:right;");
+      RenderLinks(rightPeople);
+      html.WriteEndElement();
+
+      html.WriteEndElement();
+
+      html.WriteStartElement("div");
+      html.WriteAttributeString("class", "intro-start");
+      html.WriteString(Decade(startYear) + "s");
+      if (rightPeople.Count > 0)
+        html.WriteString(" →");
+      html.WriteEndElement();
+
+      html.WriteEndElement();
+    }
+
+    private static int Decade(int year)
+    {
+      return year - year % 10;
+    }
+
+    private record PersonLink(bool Left, Individual Individual, ISection Section);
+
+    private static IEnumerable<PersonLink> CreateLinks(IGrouping<Individual, ISection> entry, IFamilySection current)
+    {
+      var left = true;
+      foreach (var section in entry.OfType<IFamilySection>())
+      {
+        if (section == current)
+          left = false;
+        else
+          yield return new PersonLink(left, entry.Key, section);
+      }
+    }
+
     public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
       var paraBuilder = new ParagraphBuilder()
@@ -130,6 +250,8 @@ namespace GedcomParser
         html.WriteEndElement();
       }
 
+      RenderIntro(this, html, renderer);
+
       var baseDirectory = Path.GetDirectoryName(renderer.Database.BasePath);
 
       html.WriteStartElement("div");
@@ -137,11 +259,11 @@ namespace GedcomParser
 
       html.WriteStartElement("figure");
       html.WriteAttributeString("class", "decendants");
-      var decendantRenderer = new DecendantLayout()
+      var decendantRenderer = new DescendantLayout()
       {
         Graphics = renderer.Graphics
       };
-      decendantRenderer.Render(Families, baseDirectory).WriteTo(html);
+      decendantRenderer.Render(Families, baseDirectory, HighlightsOnly ? renderer.DirectAncestors : null).WriteTo(html);
       html.WriteEndElement();
 
       var mapRenderer = new MapRenderer();
@@ -167,7 +289,7 @@ namespace GedcomParser
       {
         Graphics = renderer.Graphics
       };
-      var timelineSvg = timelineRenderer.Render(Families, baseDirectory);
+      var timelineSvg = timelineRenderer.Render(Families, baseDirectory, HighlightsOnly ? renderer.DirectAncestors : null);
       if (timelineSvg != null)
       {
         html.WriteStartElement("figure");
