@@ -130,8 +130,8 @@ td {
         source.Id.Replace(Guid.NewGuid().ToString("N"));
       foreach (var match in GetLinks(_source, source, FamilyLinkType.Child, FamilyLinkType.Parent))
       {
-        Console.WriteLine($"Found new person {match.Individual.Name}.");
-        AddMatch(new Match(match.Individual.Id.Primary, null));
+        if (AddMatch(new Match(match.Individual.Id.Primary, null)))
+          Console.WriteLine($"Found new person {match.Individual.Name}.");
         AddMatch(new Match(match.Family, null));
       }
       _target.Add(source);

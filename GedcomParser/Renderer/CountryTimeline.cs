@@ -15,6 +15,8 @@ namespace GedcomParser
     private readonly Database _database;
     private readonly IEnumerable<ResolvedFamily> _resolvedFamilies;
 
+    public List<Legend> LegendEntries { get; } = new List<Legend>();
+
     public CountryTimeline(Database database, IEnumerable<ResolvedFamily> resolvedFamilies)
     {
       _database = database;
@@ -26,16 +28,28 @@ namespace GedcomParser
       var diagram = new Diagram()
       {
         Width = 7 * 96,
-        Height = 5 * 96,
+        Height = 4 * 96,
         LeftDate = new DateTime(DateTime.Now.Year - (DateTime.Now.Year % 10) + 10, 1, 1),
       };
       var segment = CreateSegment(root, DateTime.Now, diagram);
+      var percentages = new Dictionary<string, double>();
+      segment.CalculatePercentages(1, percentages);
+      var colors = diagram.PlaceColors();
+      LegendEntries.AddRange(percentages.Keys
+        .Union(colors.Keys)
+        .Select(p => new Legend(p
+          , colors.TryGetValue(p, out var color) ? color : "white"
+          , percentages.TryGetValue(p, out var percentage) ? percentage : 0))
+        .OrderByDescending(l => Math.Round(l.Percentage, 3))
+        .ThenBy(l => l.Name, StringComparer.OrdinalIgnoreCase));
       diagram.RightDate = new DateTime(diagram.RightDate.Year - (diagram.RightDate.Year % 10), 1, 1);
 
+      var style = ReportStyle.Default;
+      var height = style.BaseFontSize + diagram.Height;
       var result = new XElement(SvgUtil.Ns + "svg");
-      result.SetAttributeValue("viewBox", $"0 0 {diagram.Width} {diagram.Height}");
+      result.SetAttributeValue("viewBox", $"0 0 {diagram.Width} {height}");
       result.SetAttributeValue("width", diagram.Width);
-      result.SetAttributeValue("height", diagram.Height);
+      result.SetAttributeValue("height", height);
       segment.AddInformation(result, diagram, 0, diagram.Height);
       var century = new DateTime(diagram.LeftDate.Year - (diagram.LeftDate.Year % 100), 1, 1);
       while (century > diagram.RightDate)
@@ -45,13 +59,22 @@ namespace GedcomParser
           , new XAttribute("x1", location)
           , new XAttribute("y1", 0)
           , new XAttribute("x2", location)
-          , new XAttribute("y2", diagram.Height)
+          , new XAttribute("y2", height)
           , new XAttribute("style", "stroke-width:1px;stroke:black")
         ));
+
+        result.Add(new XElement(SvgUtil.Ns + "text"
+          , new XAttribute("x", location + 2)
+          , new XAttribute("y", height - 3)
+          , new XAttribute("style", $"font-size:{style.BaseFontSize}px;font-family:{style.FontName}")
+          , century.Year));
         century = century.AddYears(-100);
       }
+
       return result;
     }
+
+    public record Legend(string Name, string Color, double Percentage);
 
     private bool ValidEventType(ResolvedEvent resolvedEvent, string personId)
     {
@@ -168,6 +191,26 @@ namespace GedcomParser
 
       private string DebuggerDisplay => $"{Places.Min(p => p.Start):yyyy-MM-dd}/{Places.Max(p => p.End):yyyy-MM-dd} for {Individual.Name.Name}";
 
+      public void CalculatePercentages(double percent, Dictionary<string, double> places)
+      {
+        var toInclude = Ancestors
+          .Where(a => a.Places.Count > 0 || a.Ancestors.Any(g => g.Places.Count > 0))
+          .ToList();
+        if (toInclude.Count < 2)
+        {
+          var placeName = Places.LastOrDefault()?.PlaceName ?? "Unknown";
+          if (!places.TryGetValue(placeName, out var currentPercentage))
+            currentPercentage = 0;
+          places[placeName] = currentPercentage + percent / (toInclude.Count == 1 ? 2 : 1);
+        }
+
+        var count = Math.Max(toInclude.Count, 2);
+        foreach (var ancestor in toInclude)
+        {
+          ancestor.CalculatePercentages(percent / count, places);
+        }
+      }
+
       public void AddInformation(XElement svg, Diagram diagram, double top, double height)
       {
         foreach (var place in Places)
@@ -194,12 +237,17 @@ namespace GedcomParser
     private class Diagram
     {
       private Dictionary<string, int> _placeHistogram = new Dictionary<string, int>();
-      private static string[] _colors = new[] { "#ddd", "#aaa", "#888", "#666", "#333", "#111" }; 
+      private static string[] _colors = new[] { "rgb(136,174,225)", "rgb(11,69,18)", "rgb(206,59,246)", "rgb(115,174,34)", "rgb(63,33,153)", "rgb(55,213,26)", "rgb(196,39,117)", "rgb(69,222,178)", "rgb(101,34,75)", "rgb(191,203,170)", "rgb(19,63,89)" }; 
 
       public double Width { get; set; }
       public double Height { get; set; }
       public DateTime LeftDate { get; set; }
       public DateTime RightDate { get; set; } = DateTime.MaxValue;
+
+      public Dictionary<string, string> PlaceColors()
+      {
+        return _placeHistogram.Keys.ToDictionary(k => k, k => Color(k));
+      }
 
       public void AddPlace(PlaceRange place)
       {

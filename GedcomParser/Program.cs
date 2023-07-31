@@ -17,24 +17,25 @@ namespace GedcomParser
   {
     static async Task Main(string[] args)
     {
-      //var source = new Database()
-      //  .Load(new FamilySearchJsonLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch2.json")
-      //  .CombineConsecutiveResidenceEvents()
-      //  .MoveResidenceEventsToFamily();
-      //await source.GeocodePlaces();
-      //var target = new Database()
-      //  .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
-      //var merge = new DatabaseMerge(source, target);
-      //merge.Add("L27Y-ZKF", "PutnamThomas16140307");
-      ////merge.Add("DavisShirleyJo19320207", "DavisShirleyJo19320207");
-      ////merge.Add("DavisThomas18210101", "DavisThomasCape18210522");
-      ////merge.Add("DomkeCarlChrist19191012", "DomkeCarlChrist19191012");
-      ////merge.Add("RosenbergHelenM19230101", "RosenbergHelenMarga19230127");
-      //merge.Process();
-      //merge.Report(@"C:\Users\erdomke\source\repos\FamilyTree\MergeReport2.html");
+      /*var source = new Database()
+        .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch2.yaml");
+      var target = new Database()
+        .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      var merge = new DatabaseMerge(source, target);
+      merge.Add("PutnamDeaconEdwa16540704", "PutnamEdward16540504");
+      merge.Add("PutnamLieutenant16150307", "PutnamThomas16140307");
+      merge.Add("HolyokeAnna16210118", "HolyokeAnn16200118");
+      merge.Add("PutnamAnn16450825", "PutnamAnn16450825");
+
+      //merge.Add("DavisShirleyJo19320207", "DavisShirleyJo19320207");
+      //merge.Add("DavisThomas18210101", "DavisThomasCape18210522");
+      //merge.Add("DomkeCarlChrist19191012", "DomkeCarlChrist19191012");
+      //merge.Add("RosenbergHelenM19230101", "RosenbergHelenMarga19230127");
+      merge.Process();
+      merge.Report(@"C:\Users\erdomke\source\repos\FamilyTree\MergeReport2.html");
       //target.MakeIdsHumanReadable();
-      //target.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
-      //return;
+      target.Write(new YamlWriter(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
+      return;*/
 
       //IndexDirectory.ProcessDirectory(@"C:\Users\erdomke\source\repos\FamilyTree\import"
       //  , @"C:\Users\erdomke\source\repos\FamilyTree\target"
@@ -43,11 +44,11 @@ namespace GedcomParser
 
       //var path = @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch2.yaml";
       //var db = new Database()
-      //  .Load(new FamilySearchJsonLoader(), Path.Combine(Path.GetDirectoryName(path), "FamilySearch.json"))
+      //  .Load(new FamilySearchJsonLoader(), Path.Combine(Path.GetDirectoryName(path), "FamilySearch2.json"))
       //  .RemoveNameOnlyIndividuals()
       //  .RemoveUnused()
       //  .MakeIdsHumanReadable();
-      ////await db.GeocodePlaces();
+      //await db.GeocodePlaces();
       //db.MarkDuplicates()
       //  .CombineConsecutiveResidenceEvents()
       //  .MoveResidenceEventsToFamily();
@@ -100,8 +101,8 @@ namespace GedcomParser
       var db = new Database()
         .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml");
 
-      //var countrySvg = new CountryTimeline(db, ResolvedFamily.Resolve(db.Families(), db)).Render("DomkeEricMatthe19880316");
-      //countrySvg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\Countries.svg");
+      var countrySvg = new CountryTimeline(db, ResolvedFamily.Resolve(db.Families(), db)).Render("DomkeEricMatthe19880316");
+      countrySvg.Save(@"C:\Users\erdomke\source\repos\FamilyTree\Countries.svg");
       //return;
 
       using (var writer = new StreamWriter(@"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.html"))

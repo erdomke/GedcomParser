@@ -1,4 +1,5 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -163,55 +164,52 @@ article {
 
       PersonIndex = new PersonIndexSection();
       var sourceList = new SourceListSection(Families);
-      var sections = DescendentFamilySection
+      var toc = new TableOfContentsSection();
+      toc.Sections.AddRange(DescendentFamilySection
         .Create(Families, Database.Groups, sourceList)
-        .OfType<ISection>()
-        .ToList();
-      foreach (var section in sections.OfType<DescendentFamilySection>())
+        .OfType<ISection>());
+      foreach (var section in toc.Sections.OfType<IFamilySection>())
       {
-        foreach (var individual in section.Families
-          .SelectMany(f => f.Members
-            .Where(m => !m.Role.HasFlag(FamilyLinkType.Child) || DescendantLayout.IncludeChild(section.Families, m.Individual, section.HighlightsOnly ? DirectAncestors : null))
-            .Select(m => m.Individual))
-          .Distinct())
-        {
-          PersonIndex.Add(individual, section);
-        }
-      }
-      foreach (var section in sections.OfType<AncestorFamilySection>())
-      {
-        foreach (var individual in section.Groups
-          .SelectMany(g => g.Families)
-          .SelectMany(f => f.Members.Select(m => m.Individual))
-          .Where(i => DirectAncestors.Intersect(i.Id).Any())
-          .Distinct())
+        var individuals = Enumerable.Empty<Individual>();
+        if (section is DescendentFamilySection descendent)
+          individuals = descendent.Families
+            .SelectMany(f => f.Members
+              .Where(m => !m.Role.HasFlag(FamilyLinkType.Child) || DescendantLayout.IncludeChild(descendent.Families, m.Individual, descendent.HighlightsOnly ? DirectAncestors : null))
+              .Select(m => m.Individual))
+            .Distinct();
+        else if (section is AncestorFamilySection ancestor)
+          individuals = ancestor.Groups
+            .SelectMany(g => g.Families)
+            .SelectMany(f => f.Members.Select(m => m.Individual))
+            .Where(i => DirectAncestors.Intersect(i.Id).Any())
+            .Distinct();
+        foreach (var individual in individuals)
         {
           PersonIndex.Add(individual, section);
         }
       }
 
       var ancestors = Database.Roots
-        .Select(r => new AncestorRenderer(Database, r, 6)
+        .Select(r => new AncestorRenderer(Database, r, Families, 6)
         {
           Graphics = Graphics
         })
         .ToList();
-      var defaultIndex = sections.Count();
+      var defaultIndex = toc.Sections.Count;
       foreach (var ancestor in Enumerable.Reverse(ancestors))
       {
         PersonIndex.Add(ancestor.Individual, ancestor);
-        var idx = sections.FindIndex(s => s is DescendentFamilySection family && family.Families.Any(f => f.Members.Any(m => m.Individual == ancestor.Individual)));
-        sections.Insert(idx < 0 ? defaultIndex : idx + 1, ancestor);
+        var idx = toc.Sections.FindIndex(s => s is DescendentFamilySection family && family.Families.Any(f => f.Members.Any(m => m.Individual == ancestor.Individual)));
+        toc.Sections.Insert(idx < 0 ? defaultIndex : idx + 1, ancestor);
       }
 
-      sections.Add(PersonIndex);
-      sections.Add(sourceList);
+      toc.Sections.Add(PersonIndex);
+      toc.Sections.Add(sourceList);
 
-      foreach (var section in sections)
-      {
+      toc.Render(html, this);
+      foreach (var section in toc.Sections)
         section.Render(html, this);
-      }
-
+      
       html.WriteEndElement();
       html.WriteEndElement();
       html.WriteEndElement();

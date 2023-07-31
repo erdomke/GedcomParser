@@ -12,6 +12,7 @@ namespace GedcomParser
     private Individual _root;
     private int _maxDepth;
     private Func<string, IEnumerable<Individual>> _getParents;
+    private CountryTimeline _countries;
 
     public Individual Individual => _root;
     public IGraphics Graphics { get; set; }
@@ -24,12 +25,14 @@ namespace GedcomParser
     private const double horizontalGap = 20;
     private const double horizPadding = 2;
 
-    public AncestorRenderer(Database database, string root, int maxDepth = int.MaxValue)
+    public AncestorRenderer(Database database, string root, IEnumerable<ResolvedFamily> families = null, int maxDepth = int.MaxValue)
     {
       Initialize(database.GetValue<Individual>(root));
       _getParents = childId => database.IndividualLinks(childId, FamilyLinkType.Birth, FamilyLinkType.Parent)
         .Select(l => database.GetValue<Individual>(l.Individual2));
       _maxDepth = maxDepth;
+      if (families != null)
+        _countries = new CountryTimeline(database, families);
     }
 
     public AncestorRenderer(IEnumerable<ResolvedFamily> families, string root, int maxDepth = int.MaxValue)
@@ -229,9 +232,44 @@ namespace GedcomParser
     public void Render(HtmlTextWriter html, ReportRenderer renderer)
     {
       html.WriteStartSection(this);
+      
       var svg = Render();
       svg.SetAttributeValue("style", "max-width:7.5in;max-height:9in");
       svg.WriteTo(html);
+
+      html.WriteStartElement("figure");
+      if (_countries != null)
+      {
+        var countriesSvg = _countries.Render(_root.Id.Primary);
+        countriesSvg.WriteTo(html);
+      }
+      html.WriteStartElement("figcaption");
+      html.WriteString("▲ Countries of origin: ");
+      foreach (var country in _countries.LegendEntries)
+      {
+        if (country.Color == "white")
+        {
+          html.WriteStartElement("span");
+          var style = $"display:inline-block;width:1em;height:1em;text-align:center;";
+          html.WriteAttributeString("style", style);
+          html.WriteString("?");
+          html.WriteEndElement();
+        }
+        else
+        {
+          html.WriteStartElement("span");
+          var style = $"display:inline-block;width:1em;height:1em;background:{country.Color}";
+          html.WriteAttributeString("style", style);
+          html.WriteEndElement();
+        }
+        html.WriteString(" " + country.Name);
+        var percent = country.Percentage.ToString("0.0%");
+        if (percent != "0.0%")
+          html.WriteString($" ({percent})");
+      }
+      html.WriteEndElement();
+      html.WriteEndElement();
+
       html.WriteEndElement();
     }
 
