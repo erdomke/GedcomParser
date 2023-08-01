@@ -1,4 +1,5 @@
 ﻿using Microsoft.Msagl.Layout.Layered;
+using SixLabors.ImageSharp;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -65,6 +66,22 @@ namespace GedcomParser.Model
     public bool ContainsId(string id)
     {
       return _nodes.ContainsKey(id);
+    }
+
+    public IEnumerable<Media> Media()
+    {
+      var result = GetValues<IHasMedia>()
+        .Concat(Groups)
+        .SelectMany(m => m.Media)
+        .Concat(GetValues<Individual>().Select(i => i.Picture).Where(m => m != null))
+        .Concat(GetValues<IHasEvents>().SelectMany(e => e.Events).SelectMany(e => e.Media))
+        .Distinct()
+        .ToList();
+      result.AddRange(result
+        .Where(m => m.Children.Count > 0)
+        .SelectMany(m => m.Children)
+        .ToList());
+      return result;
     }
 
     public Database RemoveUnused()

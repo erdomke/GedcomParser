@@ -24,6 +24,7 @@ namespace GedcomParser
     {
       html.WriteStartSection(this);
       foreach (var person in _personIndex
+        .Where(p => !string.IsNullOrEmpty(p.Key.Names.First().Surname ?? p.Key.Name.Surname))
         .OrderBy(p => p.Key.Names.First().Surname ?? p.Key.Name.Surname, StringComparer.OrdinalIgnoreCase)
         .ThenBy(p => p.Key.Name.Name, StringComparer.OrdinalIgnoreCase))
       {

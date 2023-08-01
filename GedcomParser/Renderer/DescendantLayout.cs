@@ -68,6 +68,7 @@ namespace GedcomParser
       return directAncestors == null
         || directAncestors.Intersect(individual.Id).Any()
         || !string.IsNullOrEmpty(individual.Picture?.Src)
+        || (individual.Attributes.TryGetValue("highlight", out var value) && value == "true")
         || families.Any(f => f.Parents.Contains(individual));
     }
 

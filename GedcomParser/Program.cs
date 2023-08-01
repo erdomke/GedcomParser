@@ -1,14 +1,11 @@
 ﻿using GedcomParser.Model;
-using GedcomParser.Renderer;
-using Markdig;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
@@ -17,6 +14,51 @@ namespace GedcomParser
   {
     static async Task Main(string[] args)
     {
+      /*using (var client = new HttpClient())
+      {
+        var folder = @"C:\Users\erdomke\source\repos\FamilyTree\media";
+        var dbPath = @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml";
+        var fileNames = new HashSet<string>();
+        var db = new Database()
+          .Load(new YamlLoader(), dbPath);
+        var groups = db.Media()
+          .Where(m => m.Src?.StartsWith("http") == true)
+          .GroupBy(m => m.Src)
+          .ToList();
+        var i = 1;
+        foreach (var mediaGroup in groups)
+        {
+          if (Uri.TryCreate(mediaGroup.Key, UriKind.Absolute, out var url))
+          {
+            Console.WriteLine($"Downloading {i} of {groups.Count}: {url}");
+            var pathParts = url.AbsolutePath.Split('/');
+            var fileName = "fs_" + pathParts[pathParts.Length - 2] + Path.GetExtension(url.AbsolutePath);
+            if (!File.Exists(Path.Combine(folder, fileName)))
+            {
+              var resp = await client.GetAsync(url);
+              if (resp.IsSuccessStatusCode)
+              {
+                if (!fileNames.Add(fileName))
+                  fileName = "fs_" + Guid.NewGuid().ToString("N") + Path.GetExtension(url.AbsolutePath);
+                var stream = await resp.Content.ReadAsStreamAsync();
+                using (var file = new FileStream(Path.Combine(folder, fileName), FileMode.Create, FileAccess.Write))
+                  await stream.CopyToAsync(file);
+              }
+              else
+              {
+                continue;
+              }
+            }
+
+            foreach (var media in mediaGroup)
+              media.Src = "media/" + fileName;
+          }
+          i++;
+        }
+        db.Write(new YamlWriter(), dbPath);
+      }
+      return;*/
+
       /*var source = new Database()
         .Load(new YamlLoader(), @"C:\Users\erdomke\source\repos\FamilyTree\FamilySearch2.yaml");
       var target = new Database()
@@ -134,14 +176,11 @@ namespace GedcomParser
       {
         ".png", ".gif", ".bmp", ".jpg", ".jpeg"
       };
-      foreach (var media in db.GetValues<IHasMedia>()
-        .SelectMany(m => m.Media)
-        .Concat(db.GetValues<Individual>().Select(i => i.Picture).Where(m => m != null))
-        .Concat(db.GetValues<IHasEvents>().SelectMany(e => e.Events).SelectMany(e => e.Media))
-        .Distinct()
+      foreach (var media in db.Media()
         .Where(m => !string.IsNullOrEmpty(m.Src) 
           && !m.Width.HasValue
-          && imageExtensions.Contains(Path.GetExtension(m.Src))))
+          && imageExtensions.Contains(Path.GetExtension(m.Src)))
+        .ToList())
       {
         try
         {

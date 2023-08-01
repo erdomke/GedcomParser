@@ -43,13 +43,7 @@ namespace GedcomParser
               {
                 { "$ref", i }
               })));
-          if (!string.IsNullOrEmpty(g.Content))
-          {
-            var scalar = new YamlScalarNode(g.Content);
-            if (g.Content.IndexOf('\n') >= 0)
-              scalar.Style = YamlDotNet.Core.ScalarStyle.Literal;
-            group.Add("content", scalar);
-          }
+          AddCommonProperties(group, g);
           return group;
         })));
       }

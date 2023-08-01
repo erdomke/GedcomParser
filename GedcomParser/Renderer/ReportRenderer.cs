@@ -108,8 +108,9 @@ sup.cite {
   break-inside: avoid;
 }
 
-article {
+aside {
   background: #eee;
+  padding: 0.1in;
 }
 
 .intro-timeline {

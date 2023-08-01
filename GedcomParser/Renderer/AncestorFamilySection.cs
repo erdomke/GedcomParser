@@ -21,6 +21,8 @@ namespace GedcomParser
 
     public IEnumerable<ResolvedFamily> AllFamilies => Groups.SelectMany(g => g.Families);
 
+    public IEnumerable<Media> Media { get; set; }
+
     public AncestorFamilySection(string title, IEnumerable<string> rootIds, SourceListSection sourceList)
     {
       Title = title;

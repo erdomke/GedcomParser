@@ -6,5 +6,6 @@ namespace GedcomParser.Model
   {
     ExtendedDateTime StartDate { get; }
     IEnumerable<ResolvedFamily> AllFamilies { get; }
+    IEnumerable<Media> Media { get; set; }
   }
 }

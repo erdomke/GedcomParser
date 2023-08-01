@@ -1,4 +1,5 @@
-﻿using GedcomParser.Model;
+﻿using ExCSS;
+using GedcomParser.Model;
 using GedcomParser.Renderer;
 using SixLabors.ImageSharp;
 using System;
@@ -7,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
+using static Microsoft.Msagl.Layout.Incremental.KDTree;
 
 namespace GedcomParser
 {
@@ -20,6 +22,7 @@ namespace GedcomParser
     public ExtendedDateTime StartDate { get; set; }
     public bool HighlightsOnly { get; set; }
     IEnumerable<ResolvedFamily> IFamilySection.AllFamilies => Families;
+    public IEnumerable<Media> Media { get; set; }
 
     public DescendentFamilySection(string title, SourceListSection sourceList)
     {
@@ -44,14 +47,16 @@ namespace GedcomParser
           {
             return (IFamilySection)new AncestorFamilySection(g.Title, g.Ids, sourceList)
             {
-              StartDate = g.TopicDate
+              StartDate = g.TopicDate,
+              Media = g.Media
             };
           }
           else
           {
             var resolved = new DescendentFamilySection(g.Title, sourceList)
             {
-              HighlightsOnly = g.Type == FamilyGroupType.DescendantHighlights
+              HighlightsOnly = g.Type == FamilyGroupType.DescendantHighlights,
+              Media = g.Media
             };
             resolved.Families.AddRange(g.Ids
               .Select(i => xref.TryGetValue(i, out var f) ? f : null)
@@ -213,6 +218,9 @@ namespace GedcomParser
       html.WriteEndElement();
 
       html.WriteEndElement();
+
+      foreach (var article in section.Media.Where(m => !string.IsNullOrEmpty(m.Content)))
+        RenderArticle(html, article, renderer.Graphics, "article");
     }
 
     private static int Decade(int year)
@@ -326,6 +334,14 @@ namespace GedcomParser
     private const double maxHeight = 3.3 * 96;
     // 577
 
+    internal static void RenderArticle(HtmlTextWriter html, Media article, IGraphics graphics, string elementName = "aside")
+    {
+      html.WriteStartElement(elementName);
+      html.WriteRaw(Markdig.Markdown.ToHtml(article.Content ?? article.Description));
+      RenderGalleryImages(html, article.Children, graphics);
+      html.WriteEndElement();
+    }
+
     internal static void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
     {
       var articles = media
@@ -336,11 +352,14 @@ namespace GedcomParser
         .ToList();
       foreach (var article in articles)
       {
-        html.WriteStartElement("article");
-        html.WriteRaw(Markdig.Markdown.ToHtml(article.Content ?? article.Description));
-        html.WriteEndElement();
+        RenderArticle(html, article, graphics);
       }
 
+      RenderGalleryImages(html, media, graphics);
+    }
+
+    internal static void RenderGalleryImages(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
+    {
       var images = media
         .Where(m => !string.IsNullOrEmpty(m.Src)
           && _imageExtensions.Contains(Path.GetExtension(m.Src))
@@ -446,13 +465,13 @@ namespace GedcomParser
 
         if (start < images.Count)
           rows.Add(processRow(images.Skip(start), count));
-        
+
         foreach (var row in rows)
         {
           html.WriteStartElement("div");
           html.WriteAttributeString("class", "gallery");
           foreach (var box in row.Boxes)
-            box.ToHtml(html); 
+            box.ToHtml(html);
           html.WriteEndElement();
         }
       }

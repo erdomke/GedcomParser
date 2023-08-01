@@ -3,19 +3,19 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Threading;
 using YamlDotNet.RepresentationModel;
 
 namespace GedcomParser
 {
   internal class YamlLoader: IDbLoader
   {
-    private Dictionary<string, YamlMappingNode> toProcess = new Dictionary<string, YamlMappingNode>();
+    private Dictionary<string, YamlMappingNode> _toProcess = new Dictionary<string, YamlMappingNode>();
 
     public void Load(Database database, YamlMappingNode root, IEnumerable<YamlMappingNode> alternates = null)
     {
       var keysToProcess = new HashSet<string>();
+      var familyGroups = new List<YamlMappingNode>();
+
       foreach (var doc in (alternates ?? Enumerable.Empty<YamlMappingNode>())
         .Reverse()
         .Concat(new[] { root }))
@@ -29,19 +29,7 @@ namespace GedcomParser
           }
           else if ((string)group.Key == "groups")
           {
-            foreach (var familyGroup in group.Value.EnumerateArray())
-            {
-              database.Groups.Add(new FamilyGroup()
-              {
-                Title = familyGroup.Item("title").String(),
-                Type = Enum.Parse<FamilyGroupType>(familyGroup.Item("type").String() ?? FamilyGroupType.Descendants.ToString(), true),
-                TopicDate = ExtendedDateTime.TryParse(familyGroup.Item("topic_date").String() ?? "", out var date) ? date : default,
-                Ids = familyGroup.Item("ids").EnumerateArray()
-                  .Select(n => n.Item("$ref").String().Split('/').Last())
-                  .ToList(),
-                Content = familyGroup.Item("content").String()
-              });;
-            }
+            familyGroups.AddRange(group.Value.EnumerateArray().OfType<YamlMappingNode>());
           }
           else
           {
@@ -50,7 +38,7 @@ namespace GedcomParser
               foreach (var id in idGroup)
               {
                 var key = $"#/{(string)group.Key}/{(string)id.Key}";
-                toProcess[key] = (YamlMappingNode)id.Value;
+                _toProcess[key] = (YamlMappingNode)id.Value;
                 if (doc == root)
                   keysToProcess.Add(key);
               }
@@ -59,7 +47,7 @@ namespace GedcomParser
         }
       }
 
-      foreach (var kvp in toProcess
+      foreach (var kvp in _toProcess
         .Where(k => keysToProcess.Contains(k.Key))
         .OrderBy(k =>
         {
@@ -86,6 +74,21 @@ namespace GedcomParser
           Create(kvp.Key, kvp.Value, database, Individual);
         else if (kvp.Key.StartsWith("#/families/"))
           Create(kvp.Key, kvp.Value, database, Family);
+      }
+
+      foreach (var familyGroup in familyGroups)
+      {
+        var famGroup = new FamilyGroup()
+        {
+          Title = familyGroup.Item("title").String(),
+          Type = Enum.Parse<FamilyGroupType>(familyGroup.Item("type").String() ?? FamilyGroupType.Descendants.ToString(), true),
+          TopicDate = ExtendedDateTime.TryParse(familyGroup.Item("topic_date").String() ?? "", out var date) ? date : default,
+          Ids = familyGroup.Item("ids").EnumerateArray()
+            .Select(n => n.Item("$ref").String().Split('/').Last())
+            .ToList()
+        };
+        AddCommonProperties(famGroup, familyGroup, database);
+        database.Groups.Add(famGroup);
       }
     }
 
@@ -424,7 +427,7 @@ namespace GedcomParser
       {
         if (string.IsNullOrEmpty(refId))
           throw new InvalidOperationException("Cannot create an object without an id.");
-        if (!toProcess.TryGetValue(refId, out node))
+        if (!_toProcess.TryGetValue(refId, out node))
           throw new InvalidOperationException($"Can't find the node with the id {refId}");
       }
 
