@@ -15,6 +15,7 @@ namespace GedcomParser
     {
       var keysToProcess = new HashSet<string>();
       var familyGroups = new List<YamlMappingNode>();
+      var header = default(YamlMappingNode);
 
       foreach (var doc in (alternates ?? Enumerable.Empty<YamlMappingNode>())
         .Reverse()
@@ -26,6 +27,10 @@ namespace GedcomParser
           {
             database.Roots.AddRange(group.Value.EnumerateArray()
               .Select(n => n.Item("$ref").String().Split('/').Last()));
+          }
+          else if ((string)group.Key == "header")
+          {
+            header = group.Value as YamlMappingNode;
           }
           else if ((string)group.Key == "groups")
           {
@@ -74,6 +79,12 @@ namespace GedcomParser
           Create(kvp.Key, kvp.Value, database, Individual);
         else if (kvp.Key.StartsWith("#/families/"))
           Create(kvp.Key, kvp.Value, database, Family);
+      }
+
+      if (header != null)
+      {
+        database.Header = Citation(null, header, database);
+        AddCommonProperties(database.Header, header, database);
       }
 
       foreach (var familyGroup in familyGroups)

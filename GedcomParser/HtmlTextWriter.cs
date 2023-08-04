@@ -39,6 +39,11 @@ namespace GedcomParser
       "area", "base", "basefont", "bgsound", "br", "col", "embed", "frame", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr"
     }, StringComparer.OrdinalIgnoreCase);
 
+    internal static HashSet<string> InlineElements = new HashSet<string>(new string[]
+    {
+      "a","abbr","acronym","b","bdo","big","br","button","cite","code","dfn","em","i","img","input","kbd","label","map","object","output","q","samp","script","select","small","span","strong","sub","sup","textarea","time","tt","var"
+    }, StringComparer.OrdinalIgnoreCase);
+
     private StringBuilder _attrValue;
     private string _lastTagName;
     private int _line = 1;
@@ -488,7 +493,8 @@ namespace GedcomParser
     {
       _lastTagName = null;
       CloseCurrElement(false);
-      RenderIndent();
+      if (!InlineElements.Contains(localName))
+        RenderIndent();
 
       _writer.Write('<');
       var name = localName;

@@ -17,8 +17,11 @@ namespace GedcomParser.Renderer
     private bool _previousSubjectIsFamily = false;
     private bool _inParagraph = false;
 
+    public bool IncludeBurialInformation { get; set; } = true;
+    public bool IncludeAges { get; set; } = true;
     public SourceListSection SourceList { get; set; }
     public HashSet<string> DirectAncestors { get; set; }
+    public string MonthStyle { get; set; } = "MMMM";
 
     public void StartParagraph(HtmlTextWriter html)
     {
@@ -75,7 +78,7 @@ namespace GedcomParser.Renderer
           if (deaths.TryGetValue(birth.Primary.First().Id.Primary, out var deathEvent))
           {
             if (deathEvent.Event.Date.HasValue)
-              html.WriteString(" (died" + RenderDateRange(deathEvent.Event.Date, null) + ")");
+              html.WriteString(" (died" + RenderDateRange(deathEvent.Event.Date, null, MonthStyle) + ")");
             else
               html.WriteString(" (deceased)");
           }
@@ -151,7 +154,7 @@ namespace GedcomParser.Renderer
       if (eventCitations.Count > 0)
       {
         html.WriteString(" ");
-        html.WriteStartElement("sup");
+        html.WriteStartElement("small");
         html.WriteAttributeString("class", "cite");
         html.WriteString("[");
         var first = true;
@@ -330,6 +333,7 @@ namespace GedcomParser.Renderer
       foreach (var related in ev.Related)
       {
         if (related.Type == EventType.Burial
+          && IncludeBurialInformation
           && (related.Date.HasValue || related.Place != ev.Event.Place))
         {
           var pronoun = ev.Primary.Count == 1 ? ev.Primary[0].Pronoun() : "they";
@@ -402,19 +406,19 @@ namespace GedcomParser.Renderer
       if (!includeDate || !date.HasValue)
         return;
 
-      html.WriteString(RenderDateRange(date, ageIndividual));
+      html.WriteString(RenderDateRange(date, IncludeAges ? ageIndividual : null, MonthStyle));
     }
 
-    public static string RenderDateRange(ExtendedDateRange date, Individual ageIndividual)
+    public static string RenderDateRange(ExtendedDateRange date, Individual ageIndividual, string monthStyle = "MMMM")
     {
       string RenderDate(ExtendedDateRange range, bool start)
       {
         var date = (start ? range.Start : range.End);
         var format = "yyyy";
         if (date.Month.HasValue)
-          format = "MMMM yyyy";
+          format = monthStyle + " yyyy";
         if (date.Day.HasValue)
-          format = "MMMM d, yyyy";
+          format = monthStyle + " d, yyyy";
         var result = date.ToString(format);
         if (ageIndividual != null)
           result += GetAge(ageIndividual, range, !start);
@@ -557,7 +561,7 @@ namespace GedcomParser.Renderer
         }
 
         html.WriteEndElement();
-        if (ageDate.HasValue)
+        if (ageDate.HasValue && IncludeAges)
           html.WriteString(GetAge(individual, ageDate, false));
       }
     }

@@ -43,6 +43,7 @@ namespace GedcomParser.Model
       return this;
     }
 
+    public Citation Header { get; set; }
 
     public List<string> Roots { get; } = new List<string>();
 

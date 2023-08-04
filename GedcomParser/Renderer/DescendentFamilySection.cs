@@ -219,6 +219,30 @@ namespace GedcomParser
 
       html.WriteEndElement();
 
+      var slaveHolders = section.AllFamilies
+        .SelectMany(f => f.Members.Select(m => m.Individual))
+        .Distinct()
+        .Where(i => i.Attributes.TryGetValue("Slave Holder", out var value))
+        .ToList();
+      if (slaveHolders.Count > 0)
+      {
+        html.WriteStartElement("blockquote");
+        html.WriteElementString("strong", "Note: ");
+        html.WriteString("The following individuals were noted as having owned slaves:");
+        html.WriteStartElement("ul");
+        foreach (var slaveHolder in slaveHolders)
+        {
+          html.WriteStartElement("li");
+          html.WriteStartElement("a");
+          html.WriteAttributeString("href", "#" + slaveHolder.Id.Primary);
+          html.WriteString(slaveHolder.Name.Name);
+          html.WriteEndElement();
+          html.WriteEndElement();
+        }
+        html.WriteEndElement();
+        html.WriteEndElement();
+      }
+
       foreach (var article in section.Media.Where(m => !string.IsNullOrEmpty(m.Content)))
         RenderArticle(html, article, renderer.Graphics, "article");
     }
@@ -329,7 +353,6 @@ namespace GedcomParser
     };
 
     private const double targetHeight = 3 * 96;
-    private const double lineWidth = 7.5 * 96 - 20;
     private const double gap = 8;
     private const double maxHeight = 3.3 * 96;
     // 577
@@ -338,7 +361,7 @@ namespace GedcomParser
     {
       html.WriteStartElement(elementName);
       html.WriteRaw(Markdig.Markdown.ToHtml(article.Content ?? article.Description));
-      RenderGalleryImages(html, article.Children, graphics);
+      RenderGalleryImages(html, article.Children, graphics, 7 * 96 - 20);
       html.WriteEndElement();
     }
 
@@ -358,7 +381,7 @@ namespace GedcomParser
       RenderGalleryImages(html, media, graphics);
     }
 
-    internal static void RenderGalleryImages(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
+    internal static void RenderGalleryImages(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics, double lineWidth = 7.5 * 96 - 20)
     {
       var images = media
         .Where(m => !string.IsNullOrEmpty(m.Src)
@@ -581,25 +604,35 @@ namespace GedcomParser
         || media.Date.HasValue
         || media.Place != null)
       {
+        var hasDate = media.Date.HasValue && media.Date.Start.Certainty == DateCertainty.Known;
+        var hasDescription = !string.IsNullOrEmpty(media.Description);
+        var hasPlace = media.Place != null;
+
         html.WriteStartElement(elementName);
         if (!string.IsNullOrEmpty(style))
           html.WriteAttributeString("style", style);
         if (prefixSuffix?.EndsWith(" ") == true)
           html.WriteString(prefixSuffix);
-        if (media.Date.HasValue && media.Date.Start.Certainty == DateCertainty.Known)
+        if (hasDate)
         {
           html.WriteStartElement("time");
           html.WriteString(media.Date.ToString("yyyy MMM d"));
           html.WriteEndElement();
-          html.WriteString(": ");
         }
-        if (!string.IsNullOrEmpty(media.Description))
-          html.WriteRaw(ParagraphBuilder.ToInlineHtml(media.Description.TrimEnd('.')));
-        if (media.Place != null)
+        if (hasDescription)
         {
-          html.WriteString(" at " + media.Place.Names.FirstOrDefault()?.Name);
+          if (hasDate)
+            html.WriteString(": ");
+          html.WriteRaw(ParagraphBuilder.ToInlineHtml(media.Description.TrimEnd('.')));
         }
-        html.WriteString(".");
+        if (hasPlace)
+        {
+          if (hasDescription)
+            html.WriteString(" at ");
+          html.WriteString(media.Place.Names.FirstOrDefault()?.Name);
+        }
+        if (hasDescription || hasPlace)
+          html.WriteString(".");
         if (prefixSuffix?.StartsWith(" ") == true)
           html.WriteString(prefixSuffix);
         html.WriteEndElement();

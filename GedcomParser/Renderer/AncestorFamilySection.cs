@@ -37,7 +37,10 @@ namespace GedcomParser
       var paraBuilder = new ParagraphBuilder()
       {
         SourceList = _sourceList,
-        DirectAncestors = renderer.DirectAncestors
+        DirectAncestors = renderer.DirectAncestors,
+        IncludeBurialInformation = false,
+        IncludeAges = false,
+        MonthStyle = "MMM"
       };
       html.WriteStartSection(this);
 
@@ -64,7 +67,7 @@ namespace GedcomParser
           Graphics = renderer.Graphics
         };
         var svg = ancestorRenderer.Render();
-        svg.SetAttributeValue("style", "max-width:7.5in;max-height:9in");
+        svg.SetAttributeValue("style", "max-width:7.5in;max-height:8in");
         svg.WriteTo(html);
         html.WriteEndElement();
 
@@ -87,9 +90,42 @@ namespace GedcomParser
           }
         }
 
+        var peopleWithPictures = group.Families
+          .SelectMany(f => f.Members.Select(m => m.Individual))
+          .Where(i => i.Picture != null 
+            && i.Id.Intersect(renderer.DirectAncestors).Any())
+          .Distinct()
+          .ToList();
+        if (peopleWithPictures.Count > 0)
+        {
+          html.WriteStartElement("div");
+          html.WriteAttributeString("class", "gallery");
+
+          foreach (var person in peopleWithPictures)
+          {
+            html.WriteStartElement("figure");
+            html.WriteStartElement("img");
+            html.WriteAttributeString("src", person.Picture.Src);
+            html.WriteAttributeString("style", $"width:{person.Picture.Width * 100 / person.Picture.Height:0.0}px;height:100px");
+            html.WriteEndElement();
+
+            html.WriteStartElement("figcaption");
+            html.WriteString(person.Name.Name);
+            html.WriteEndElement();
+
+            html.WriteEndElement();
+          }
+
+          html.WriteEndElement();
+        }
+
         foreach (var family in group.Families)
         {
           var allEvents = ResolvedEventGroup.Group(family.Events
+            .Where(e => e.Event.Type == EventType.Birth
+              || e.Event.Type == EventType.Marriage
+              || e.Event.Type == EventType.Adoption
+              || e.Event.Type == EventType.Death)
             .Where(e => renderer.DirectAncestors.Intersect(e.Primary.SelectMany(e => e.Id)).Any()
               || e.Event.Type == EventType.Birth
               || e.Event.Type == EventType.Adoption
@@ -100,7 +136,12 @@ namespace GedcomParser
           paraBuilder.EndParagraph(html);
 
           DescendentFamilySection.RenderGallery(html, family.Media
-                      .Concat(family.Events.SelectMany(e => e.Event.Media.Concat(e.Related.SelectMany(r => r.Media)))), renderer.Graphics);
+            .Concat(family.Events
+              .Where(e => e.Event.Type != EventType.Death)
+              .SelectMany(e => e.Event.Media
+                .Concat(e.Related.SelectMany(r => r.Media))
+              )
+            ), renderer.Graphics);
         }
 
         html.WriteEndElement();

@@ -14,6 +14,26 @@ namespace GedcomParser
   {
     static async Task Main(string[] args)
     {
+      var dbPath = @"C:\Users\erdomke\source\repos\FamilyTree\FamilyTree.gen.yaml";
+      var db = new Database()
+        .Load(new YamlLoader(), dbPath);
+      foreach (var mediaGroup in db.Media()
+        .Where(m => m.Src?.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) == true)
+        .GroupBy(m => m.Src, StringComparer.OrdinalIgnoreCase))
+      {
+        var filePath = Path.Combine(Path.GetDirectoryName(dbPath), mediaGroup.Key);
+        if (File.Exists(filePath))
+        {
+          foreach (var media in mediaGroup)
+          {
+            media.Content = File.ReadAllText(filePath);
+            media.Src = null;
+          }
+          File.Delete(filePath);
+        }
+      }
+      db.Write(new YamlWriter(), dbPath);
+      return;
       /*using (var client = new HttpClient())
       {
         var folder = @"C:\Users\erdomke\source\repos\FamilyTree\media";

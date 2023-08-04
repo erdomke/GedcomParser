@@ -18,6 +18,10 @@ namespace GedcomParser
         .Select(r => db.TryGetValue(r, out Individual individual) ? individual.Id.Primary : null)
         .Where(r => !string.IsNullOrEmpty(r))
         .ToList();
+
+      if (db.Header != null)
+        root.Add("header", Visit(db.Header));
+      
       if (rootPeople.Count > 0)
         root.Add("roots", new YamlSequenceNode(rootPeople.Select(r => new YamlMappingNode()
         {
@@ -483,8 +487,9 @@ namespace GedcomParser
       }
       if (!string.IsNullOrEmpty(media.Content))
       {
-        var scalar = new YamlScalarNode(media.Content);
-        if (media.Content.IndexOf('\n') >= 0)
+        var content = media.Content.Trim();
+        var scalar = new YamlScalarNode(content);
+        if (media.Content.IndexOfAny(new[] { '\r', '\n' }) >= 0)
           scalar.Style = YamlDotNet.Core.ScalarStyle.Literal;
         mediaNode.Add("content", scalar);
       }

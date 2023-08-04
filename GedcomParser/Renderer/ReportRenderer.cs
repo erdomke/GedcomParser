@@ -42,8 +42,26 @@ namespace GedcomParser
       html.WriteStartElement("html");
       html.WriteStartElement("head");
       html.WriteElementString("style", @"body {
-  font-family: Calibri;
+  font-family: Lora, serif;
   font-size: 10pt;
+}
+h1, h2, h3, h4, h5, h6 {
+  font-family: Montserrat, san-serif;
+}
+.title-page h1,
+.title-page p {
+  text-align: center;
+}
+.title {
+  font-size: 32pt;
+  margin-top: 3in;
+}
+.author {
+  margin-top: 1in;
+  font-weight: bold;
+}
+h1 {
+  font-size: 
 }
 main {
   max-width: 7.5in;
@@ -51,6 +69,8 @@ main {
 }
 main p {
   text-align: justify;
+  margin-block-start: 0.7em;
+  margin-block-end: 0.7em;
 }
 section {
   page-break-before: always;
@@ -78,6 +98,9 @@ figcaption {
   flex: 1;
   border-bottom: 1px dotted black;
 }
+.person-index .refs {
+  text-align: right;
+}
 a {
   color: inherit;
   text-decoration: none;
@@ -85,7 +108,11 @@ a {
 a:hover {
   text-decoration: underline;
 }
-sup.cite {
+blockquote {
+  border-left: 4px solid #ccc;
+  padding-left: 1em;
+}
+small.cite {
   color: #999;
 }
 .event-descrip {
@@ -207,6 +234,11 @@ aside {
       toc.Sections.Add(PersonIndex);
       toc.Sections.Add(sourceList);
 
+      if (Database.Header != null)
+      {
+        var title = new TitlePageRenderer(Database.Header);
+        title.Render(html, this);
+      }
       toc.Render(html, this);
       foreach (var section in toc.Sections)
         section.Render(html, this);
