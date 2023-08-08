@@ -100,7 +100,10 @@ namespace GedcomParser.Renderer
             html.WriteString(", ");
           if (ev.Event.Attributes.TryGetValue("Occupation", out var occupation))
           {
-            html.WriteString(" as a ");
+            var word = "a";
+            if (occupation.TrimStart().ToUpperInvariant().IndexOfAny(new[] { 'A', 'E', 'I', 'O', 'U' }) == 0)
+              word = "an";
+            html.WriteString($" as {word} ");
             html.WriteString(occupation);
           }
           AddDate(html, ev.Event.Date, includeDate);
@@ -123,7 +126,10 @@ namespace GedcomParser.Renderer
 
           if (ev.Event.Attributes.TryGetValue("Degree", out var degree))
           {
-            html.WriteString(" with a ");
+            var word = "a";
+            if (degree.TrimStart().ToUpperInvariant().IndexOfAny(new[] { 'A', 'E', 'I', 'O', 'U' }) == 0)
+              word = "an";
+            html.WriteString($" with {word} ");
             html.WriteString(degree);
           }
           AddPlace(html, ev.Event, "from");
@@ -145,7 +151,7 @@ namespace GedcomParser.Renderer
       }
 
       var eventCitations = eventGroup.Events.SelectMany(e => e.Event.Citations)
-        .Select(c => new { Id = c.Id.Primary, Index = SourceList.Citations.FindIndex(o => o.Id.Primary == c.Id.Primary) })
+        .Select(c => new { Id = c.Id.Primary, Index = SourceList.Add(c) })
         .Where(c => c.Index >= 0)
         .GroupBy(c => c.Index)
         .Select(g => g.First())
@@ -214,7 +220,7 @@ namespace GedcomParser.Renderer
           html.WriteString(" of ");
           html.WriteString(cause);
         }
-        AddPlace(html, ev.Event);
+        AddPlace(html, ev.Event, "in");
       }
       else if (ev.Event.Type == EventType.Degree)
       {
@@ -280,10 +286,11 @@ namespace GedcomParser.Renderer
         AddNames(html, ev.Primary, nameType, default);
         SetSubject(ev.Primary, ev.Primary.Skip(1).Any());
         var placeFirst = false;
+        var placeWord = "at";
         switch (ev.Event.Type)
         {
           case EventType.Baptism:
-            html.WriteString(" was baptised");
+            html.WriteString(" was baptized");
             placeFirst = true;
             break;
           case EventType.Christening:
@@ -298,6 +305,7 @@ namespace GedcomParser.Renderer
             break;
           case EventType.Residence:
             html.WriteString(" resided");
+            placeWord = "in";
             placeFirst = true;
             break;
           case EventType.Engagement:
@@ -316,7 +324,7 @@ namespace GedcomParser.Renderer
             break;
         }
         if (placeFirst)
-          AddPlace(html, ev.Event);
+          AddPlace(html, ev.Event, placeWord);
         AddDate(html, ev.Event.Date, includeDate);
         if (!placeFirst)
           AddPlace(html, ev.Event);
@@ -342,7 +350,7 @@ namespace GedcomParser.Renderer
             + (pronoun == "they" ? " were " : " was ")
             + "buried");
           AddDate(html, related.Date, includeDate);
-          AddPlace(html, related);
+          AddPlace(html, related, "in");
           html.WriteString(".");
         }
         else if (string.Equals(related.TypeString, "Diagnosis", StringComparison.OrdinalIgnoreCase))

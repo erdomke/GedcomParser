@@ -81,6 +81,10 @@ time {
 figure {
   margin: 0;
   text-align: center;
+  break-inside: avoid;
+}
+img.grayscale {
+  filter: grayscale(1);
 }
 .diagrams {
   display:flex;
@@ -94,12 +98,17 @@ figcaption {
 .person-index {
   display:flex;
 }
-.person-index .filler {
+.person-index .filler,
+.toc-link .filler {
   flex: 1;
   border-bottom: 1px dotted black;
 }
 .person-index .refs {
   text-align: right;
+}
+.person-links {
+  padding-left: 0.25in;
+  color:#999;
 }
 a {
   color: inherit;
@@ -136,7 +145,7 @@ small.cite {
 }
 
 aside {
-  background: #eee;
+  border: 2px solid #333;
   padding: 0.1in;
 }
 
@@ -161,6 +170,27 @@ aside {
   display: flex;
 }
 
+.startPageNumber {
+  counter-reset: page 1;
+}
+
+.toc-link {
+  display:flex; 
+}
+
+.toc-link::after {
+  content: target-counter(attr(href url), page);
+  order: 1;
+}
+
+.onlyPage::after {
+  content: target-counter(attr(href url), page);
+}
+
+.withPage::after {
+  content: "", page "" target-counter(attr(href url), page);
+}
+
 @media screen {
   .pagedjs_page {
     border: 1px solid #ccc !important;
@@ -172,26 +202,37 @@ aside {
     size: letter;
     margin: 0.75in 0.5in;
   }
+
   @page:left {
     @bottom-left {
       content: counter(page);
     }
   }
+
   @page:right {
     @bottom-right {
       content: counter(page);
     }
   }
+
+  @page:first {
+    @bottom-left {
+      content: none
+    }
+    @bottom-right {
+      content: none;
+    }
+  }
 }");
-      //html.WriteStartElement("script");
-      //html.WriteAttributeString("src", "https://unpkg.com/pagedjs/dist/paged.polyfill.js");
-      //html.WriteEndElement();
+      html.WriteStartElement("script");
+      html.WriteAttributeString("src", "https://unpkg.com/pagedjs/dist/paged.polyfill.js");
+      html.WriteEndElement();
       html.WriteEndElement();
       html.WriteStartElement("body");
       html.WriteStartElement("main");
 
       PersonIndex = new PersonIndexSection();
-      var sourceList = new SourceListSection(Families);
+      var sourceList = new SourceListSection();
       var toc = new TableOfContentsSection();
       toc.Sections.AddRange(DescendentFamilySection
         .Create(Families, Database.Groups, sourceList)
@@ -234,14 +275,16 @@ aside {
       toc.Sections.Add(PersonIndex);
       toc.Sections.Add(sourceList);
 
+      var state = new RenderState();
       if (Database.Header != null)
       {
         var title = new TitlePageRenderer(Database.Header);
-        title.Render(html, this);
+        title.Render(html, this, state);
       }
-      toc.Render(html, this);
+      toc.Render(html, this, state);
+      state.RestartPageNumbers = true;
       foreach (var section in toc.Sections)
-        section.Render(html, this);
+        section.Render(html, this, state);
       
       html.WriteEndElement();
       html.WriteEndElement();

@@ -32,7 +32,7 @@ namespace GedcomParser
       _sourceList = sourceList;
     }
 
-    public void Render(HtmlTextWriter html, ReportRenderer renderer)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer, RenderState state)
     {
       var paraBuilder = new ParagraphBuilder()
       {
@@ -42,7 +42,7 @@ namespace GedcomParser
         IncludeAges = false,
         MonthStyle = "MMM"
       };
-      html.WriteStartSection(this);
+      html.WriteStartSection(this, state);
 
       foreach (var family in Groups.SelectMany(g => g.Families).Skip(1))
       {
@@ -51,12 +51,14 @@ namespace GedcomParser
         html.WriteEndElement();
       }
 
-      DescendentFamilySection.RenderIntro(this, html, renderer);
+      DescendentFamilySection.RenderIntro(this, html, renderer, _sourceList);
 
       var baseDirectory = Path.GetDirectoryName(renderer.Database.BasePath);
 
       foreach (var group in Groups)
       {
+        html.WriteElementString("h3", renderer.Database.GetValue<Individual>(group.RootPersonId).Name.Name);
+
         html.WriteStartElement("div");
         html.WriteAttributeString("class", "diagrams");
 
@@ -70,6 +72,30 @@ namespace GedcomParser
         svg.SetAttributeValue("style", "max-width:7.5in;max-height:8in");
         svg.WriteTo(html);
         html.WriteEndElement();
+
+        var peopleWithPictures = group.Families
+          .SelectMany(f => f.Members.Select(m => m.Individual))
+          .Where(i => i.Picture != null
+            && i.Id.Intersect(renderer.DirectAncestors).Any())
+          .Distinct()
+          .ToList();
+
+        foreach (var person in peopleWithPictures)
+        {
+          html.WriteStartElement("figure");
+          html.WriteStartElement("img");
+          html.WriteAttributeString("src", person.Picture.Src);
+          html.WriteAttributeString("style", $"width:{person.Picture.Width * 100 / person.Picture.Height:0.0}px;height:100px");
+          if (person.Picture.Attributes.TryGetValue("grayscale", out var value) && value == "true")
+            html.WriteAttributeString("class", "grayscale");
+          html.WriteEndElement();
+
+          html.WriteStartElement("figcaption");
+          html.WriteString(person.Name.Name);
+          html.WriteEndElement();
+
+          html.WriteEndElement();
+        }
 
         var mapRenderer = new MapRenderer();
         if (mapRenderer.TryRender(group.Families, baseDirectory, out var figures))
@@ -90,61 +116,17 @@ namespace GedcomParser
           }
         }
 
-        var peopleWithPictures = group.Families
-          .SelectMany(f => f.Members.Select(m => m.Individual))
-          .Where(i => i.Picture != null 
-            && i.Id.Intersect(renderer.DirectAncestors).Any())
-          .Distinct()
-          .ToList();
-        if (peopleWithPictures.Count > 0)
-        {
-          html.WriteStartElement("div");
-          html.WriteAttributeString("class", "gallery");
+        html.WriteEndElement();
 
-          foreach (var person in peopleWithPictures)
-          {
-            html.WriteStartElement("figure");
-            html.WriteStartElement("img");
-            html.WriteAttributeString("src", person.Picture.Src);
-            html.WriteAttributeString("style", $"width:{person.Picture.Width * 100 / person.Picture.Height:0.0}px;height:100px");
-            html.WriteEndElement();
-
-            html.WriteStartElement("figcaption");
-            html.WriteString(person.Name.Name);
-            html.WriteEndElement();
-
-            html.WriteEndElement();
-          }
-
-          html.WriteEndElement();
-        }
-
-        foreach (var family in group.Families)
-        {
-          var allEvents = ResolvedEventGroup.Group(family.Events
-            .Where(e => e.Event.Type == EventType.Birth
-              || e.Event.Type == EventType.Marriage
-              || e.Event.Type == EventType.Adoption
-              || e.Event.Type == EventType.Death)
-            .Where(e => renderer.DirectAncestors.Intersect(e.Primary.SelectMany(e => e.Id)).Any()
-              || e.Event.Type == EventType.Birth
-              || e.Event.Type == EventType.Adoption
-              || e.Event.Type == EventType.Death));
-          paraBuilder.StartParagraph(html);
-          foreach (var ev in allEvents)
-            paraBuilder.WriteEvent(html, ev, true);
-          paraBuilder.EndParagraph(html);
-
-          DescendentFamilySection.RenderGallery(html, family.Media
-            .Concat(family.Events
+        DescendentFamilySection.RenderGallery(html, group.Families
+          .SelectMany(f => f.Media
+            .Concat(f.Events
               .Where(e => e.Event.Type != EventType.Death)
               .SelectMany(e => e.Event.Media
                 .Concat(e.Related.SelectMany(r => r.Media))
               )
-            ), renderer.Graphics);
-        }
-
-        html.WriteEndElement();
+            )
+          ), renderer.Graphics, _sourceList);
       }
     }
   }

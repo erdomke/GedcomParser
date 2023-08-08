@@ -1,4 +1,5 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -229,9 +230,9 @@ namespace GedcomParser
       return result;
     }
 
-    public void Render(HtmlTextWriter html, ReportRenderer renderer)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer, RenderState state)
     {
-      html.WriteStartSection(this);
+      html.WriteStartSection(this, state);
       
       var svg = Render();
       svg.SetAttributeValue("style", "max-width:7.5in;max-height:9in");

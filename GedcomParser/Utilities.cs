@@ -1,4 +1,5 @@
 ﻿using GedcomParser.Model;
+using GedcomParser.Renderer;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -74,9 +75,20 @@ namespace GedcomParser
       }
     }
 
-    public static void WriteStartSection(this HtmlTextWriter html, ISection section)
+    public static void WriteStartSection(this HtmlTextWriter html, ISection section, RenderState state)
     {
       html.WriteStartElement("section");
+      if (section is TableOfContentsSection)
+        html.WriteAttributeString("class", "toc");
+
+      if (state.RestartPageNumbers)
+      {
+        html.WriteStartElement("a");
+        html.WriteAttributeString("class", "startPageNumber");
+        html.WriteEndElement();
+        state.RestartPageNumbers = false;
+      }
+
       html.WriteStartElement("h2");
       html.WriteAttributeString("id", section.Id);
       html.WriteString(section.Title);

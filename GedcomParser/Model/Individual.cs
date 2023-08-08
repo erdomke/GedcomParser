@@ -23,6 +23,7 @@ namespace GedcomParser.Model
     public ExtendedDateRange DeathDate => Events.FirstOrDefault(e => e.Type == EventType.Death)?.Date ?? default;
     public List<IndividualName> Names { get; } = new List<IndividualName>();
     public List<Event> Events { get; } = new List<Event>();
+    public List<Citation> PublishedWorks { get; } = new List<Citation>();
 
     public Dictionary<string, string> Attributes { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     public List<Citation> Citations { get; } = new List<Citation>();

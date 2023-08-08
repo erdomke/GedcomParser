@@ -21,7 +21,7 @@ namespace GedcomParser.Renderer
       _citation = citation;
     }
 
-    public void Render(HtmlTextWriter html, ReportRenderer renderer)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer, RenderState state)
     {
       html.WriteStartElement("section");
       html.WriteAttributeString("class", "title-page");

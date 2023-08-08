@@ -134,6 +134,11 @@ namespace GedcomParser
           case "picture":
             individual.Picture = Media((YamlMappingNode)property.Value, database);
             break;
+          case "published_works":
+            individual.PublishedWorks.AddRange(((YamlSequenceNode)property.Value).Children
+              .OfType<YamlMappingNode>()
+              .Select(c => Citation(null, c, database)));
+            break;
         }
       }
       return individual;

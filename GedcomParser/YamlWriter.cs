@@ -123,6 +123,9 @@ namespace GedcomParser
           })
           .ThenBy(e => e.Date.ToString("s"))
           .Select(Visit)));
+      if (individual.PublishedWorks.Count > 0)
+        node.Add("published_works", new YamlSequenceNode(individual.PublishedWorks
+          .Select(Visit)));
 
       AddCommonProperties(node, individual);
 

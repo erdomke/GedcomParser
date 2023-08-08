@@ -122,7 +122,7 @@ namespace GedcomParser
       return result.OrderByDescending(g => g.StartDate).ToList();
     }
 
-    internal static void RenderIntro(IFamilySection section, HtmlTextWriter html, ReportRenderer renderer)
+    internal static void RenderIntro(IFamilySection section, HtmlTextWriter html, ReportRenderer renderer, SourceListSection sourceList)
     {
       var eventDates = section.AllFamilies
         .SelectMany(f => f.Events)
@@ -152,6 +152,7 @@ namespace GedcomParser
           html.WriteString("See ");
           html.WriteStartElement("a");
           html.WriteAttributeString("href", "#" + section.Key.Id);
+          html.WriteAttributeString("class", "withPage");
           html.WriteAttributeString("style", "font-style:italic");
           html.WriteString(section.Key.Title);
           html.WriteEndElement();
@@ -228,7 +229,7 @@ namespace GedcomParser
       {
         html.WriteStartElement("blockquote");
         html.WriteElementString("strong", "Note: ");
-        html.WriteString("The following individuals were noted as having owned slaves:");
+        html.WriteString("The following individuals were noted as owning slaves:");
         html.WriteStartElement("ul");
         foreach (var slaveHolder in slaveHolders)
         {
@@ -244,7 +245,7 @@ namespace GedcomParser
       }
 
       foreach (var article in section.Media.Where(m => !string.IsNullOrEmpty(m.Content)))
-        RenderArticle(html, article, renderer.Graphics, "article");
+        RenderArticle(html, article, renderer.Graphics, sourceList, "article");
     }
 
     private static int Decade(int year)
@@ -266,14 +267,14 @@ namespace GedcomParser
       }
     }
 
-    public void Render(HtmlTextWriter html, ReportRenderer renderer)
+    public void Render(HtmlTextWriter html, ReportRenderer renderer, RenderState state)
     {
       var paraBuilder = new ParagraphBuilder()
       {
         SourceList = _sourceList,
         DirectAncestors = renderer.DirectAncestors
       };
-      html.WriteStartSection(this);
+      html.WriteStartSection(this, state);
 
       foreach (var family in Families.Skip(1))
       {
@@ -282,7 +283,7 @@ namespace GedcomParser
         html.WriteEndElement();
       }
 
-      RenderIntro(this, html, renderer);
+      RenderIntro(this, html, renderer, _sourceList);
 
       var baseDirectory = Path.GetDirectoryName(renderer.Database.BasePath);
 
@@ -341,9 +342,8 @@ namespace GedcomParser
         paraBuilder.EndParagraph(html);
 
         RenderGallery(html, family.Media
-          .Concat(family.Events.SelectMany(e => e.Event.Media.Concat(e.Related.SelectMany(r => r.Media)))), renderer.Graphics);
+          .Concat(family.Events.SelectMany(e => e.Event.Media.Concat(e.Related.SelectMany(r => r.Media)))), renderer.Graphics, _sourceList);
       }
-
       html.WriteEndElement();
     }
 
@@ -357,15 +357,37 @@ namespace GedcomParser
     private const double maxHeight = 3.3 * 96;
     // 577
 
-    internal static void RenderArticle(HtmlTextWriter html, Media article, IGraphics graphics, string elementName = "aside")
+    internal static void RenderArticle(HtmlTextWriter html, Media article, IGraphics graphics, SourceListSection sourceList, string elementName = "aside")
     {
       html.WriteStartElement(elementName);
+      html.WriteStartElement("div");
+      if (article.Attributes.TryGetValue("columns", out var columns))
+        html.WriteAttributeString("style", $"columns:{columns}");
       html.WriteRaw(Markdig.Markdown.ToHtml(article.Content ?? article.Description));
+      html.WriteEndElement();
+      if (article.Citations.Count > 0)
+      {
+        html.WriteStartElement("p");
+        html.WriteString("Sources: ");
+        var first = true;
+        foreach (var citation in article.Citations)
+        {
+          if (first)
+            first = false;
+          else
+            html.WriteString(", ");
+          html.WriteStartElement("a");
+          html.WriteAttributeString("href", "#" + citation.Id.Primary);
+          html.WriteString("[" + sourceList.Add(citation) + "]");
+          html.WriteEndElement();
+        }
+        html.WriteEndElement();
+      }
       RenderGalleryImages(html, article.Children, graphics, 7 * 96 - 20);
       html.WriteEndElement();
     }
 
-    internal static void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics)
+    internal static void RenderGallery(HtmlTextWriter html, IEnumerable<Media> media, IGraphics graphics, SourceListSection sourceList)
     {
       var articles = media
         .Where(m => string.IsNullOrEmpty(m.Src)
@@ -375,7 +397,7 @@ namespace GedcomParser
         .ToList();
       foreach (var article in articles)
       {
-        RenderArticle(html, article, graphics);
+        RenderArticle(html, article, graphics, sourceList);
       }
 
       RenderGalleryImages(html, media, graphics);
@@ -591,6 +613,8 @@ namespace GedcomParser
         html.WriteStartElement("img");
         html.WriteAttributeString("src", Media.Src);
         html.WriteAttributeString("style", $"width:{ImageWidth:0.0}px;height:{Height:0.0}px");
+        if (Media.Attributes.TryGetValue("grayscale", out var value) && value == "true")
+          html.WriteAttributeString("class", "grayscale");
         html.WriteEndElement();
         if (IncludeCaption)
           WriteCaption(html, Media, "figcaption", "▲ ");
@@ -629,6 +653,8 @@ namespace GedcomParser
         {
           if (hasDescription)
             html.WriteString(" at ");
+          else if (hasDate)
+            html.WriteString(": ");
           html.WriteString(media.Place.Names.FirstOrDefault()?.Name);
         }
         if (hasDescription || hasPlace)

@@ -7,6 +7,6 @@ namespace GedcomParser
     public string Title { get; }
     public string Id { get; }
 
-    void Render(HtmlTextWriter html, ReportRenderer renderer);
+    void Render(HtmlTextWriter html, ReportRenderer renderer, RenderState state);
   }
 }
