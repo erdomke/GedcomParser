@@ -1,9 +1,11 @@
 ﻿using GedcomParser.Model;
 using GedcomParser.Renderer;
+using Microsoft.Msagl.GraphmapsWithMesh;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.Json;
 using System.Xml.Linq;
 
 namespace GedcomParser
@@ -53,7 +55,7 @@ namespace GedcomParser
       Title = "Ancestors of " + root.Name.Name;
     }
 
-    public XElement Render()
+    private IEnumerable<PersonLabel> RenderShapes()
     {
       var shapes = new List<PersonLabel>
       {
@@ -70,7 +72,7 @@ namespace GedcomParser
         var previousInColumn = shapes.LastOrDefault(s => s.Column == nextColumn);
         child.Parents.AddRange(_getParents(child.Individual.Id.Primary)
           .Select(i => new PersonLabel(i, nextColumn, Graphics)));
-        
+
         if (child.Parents.Count > 0)
         {
           var childPreferredTop = child.PreferredParentTop;
@@ -152,7 +154,7 @@ namespace GedcomParser
       for (var i = 1; i < shapes.Count; i++)
       {
         var parentGroup = new List<PersonLabel>() { shapes[i] };
-        while ((i + 1) < shapes.Count && shapes[i+1].Child == parentGroup[0].Child)
+        while ((i + 1) < shapes.Count && shapes[i + 1].Child == parentGroup[0].Child)
         {
           i++;
           parentGroup.Add(shapes[i]);
@@ -218,6 +220,11 @@ namespace GedcomParser
         }
       }*/
 
+      return shapes;
+    }
+
+    private XElement Render(IEnumerable<PersonLabel> shapes)
+    {
       var result = new XElement(SvgUtil.Ns + "svg");
       var height = shapes.Max(n => n.Bottom);
       var width = shapes.Max(n => n.Right);
@@ -230,46 +237,300 @@ namespace GedcomParser
       return result;
     }
 
+    public XElement Render()
+    {
+      return Render(RenderShapes());
+    }
+
     public void Render(HtmlTextWriter html, ReportRenderer renderer, RenderState state)
     {
       html.WriteStartSection(this, state);
-      
-      var svg = Render();
-      svg.SetAttributeValue("style", "max-width:7.5in;max-height:9in");
+
+      var shapes = RenderShapes();
+      var svg = Render(shapes);
+      svg.SetAttributeValue("style", $"max-width:{ReportStyle.Default.PageWidthInches}in;max-height:8.7in");
       svg.WriteTo(html);
 
-      html.WriteStartElement("figure");
       if (_countries != null)
       {
+        html.WriteStartElement("figure");
         var countriesSvg = _countries.Render(_root.Id.Primary);
         countriesSvg.WriteTo(html);
+        html.WriteStartElement("figcaption");
+        html.WriteString("▲ Countries of origin: ");
+        foreach (var country in _countries.LegendEntries)
+        {
+          if (country.Color == "white")
+          {
+            html.WriteStartElement("span");
+            var style = $"display:inline-block;width:1em;height:1em;text-align:center;";
+            html.WriteAttributeString("style", style);
+            html.WriteString("?");
+            html.WriteEndElement();
+          }
+          else
+          {
+            html.WriteStartElement("span");
+            var style = $"display:inline-block;width:1em;height:1em;background:{country.Color}";
+            html.WriteAttributeString("style", style);
+            html.WriteEndElement();
+          }
+          html.WriteString(" " + country.Name);
+          var percent = country.Percentage.ToString("0.0%");
+          if (percent != "0.0%")
+            html.WriteString($" ({percent})");
+        }
+        html.WriteEndElement();
+        html.WriteEndElement();
       }
-      html.WriteStartElement("figcaption");
-      html.WriteString("▲ Countries of origin: ");
-      foreach (var country in _countries.LegendEntries)
+
+      WriteMedicalTable(html, renderer);
+      WriteStatistics(html, renderer, shapes.Select(s => s.Individual).ToList(), state);
+
+      html.WriteEndElement();
+    }
+
+    private void WriteStatistics(HtmlTextWriter html, ReportRenderer renderer, IEnumerable<Individual> ancestors, RenderState state)
+    {
+      var lifeSpans = ancestors
+        .Where(i => i.BirthDate.Type == DateRangeType.Date && i.DeathDate.Type == DateRangeType.Date)
+        .Select(i => new {
+          Sex = i.Sex,
+          BirthYear = i.BirthDate.Start.Year,
+          LifeSpan = i.BirthDate.TryGetDiff(i.DeathDate, out var min, out var max) ? min.Years : -1
+        })
+        .Where(d => d.LifeSpan >= 0)
+        .GroupBy(i => i.Sex)
+        .Select((g, i) => new Dictionary<string, object>()
+        {
+          { "label", g.Key.ToString() },
+          { "data", g.Select(v => new Dictionary<string, object>()
+          {
+            { "x", v.BirthYear },
+            { "y", v.LifeSpan }
+          }) },
+          { "backgroundColor", ReportStyle.Default.Colors[i] }
+        })
+        .ToList();
+      WriteChart(html, state, lifeSpans, _root.Id.Primary + "_lifespan", "Birth Year", "Lifespan (Years)", "Ancestor lifespan by birth year.");
+
+      var marriageAges = ancestors
+        .Where(i => i.BirthDate.Type == DateRangeType.Date)
+        .Select(i => new {
+          Individual = i,
+          Families = renderer.Families.Where(f => f.Parents.Contains(i)).ToList()
+        })
+        .Where(i => i.Families.All(f => f.Events.Any(e => e.Event.Type == EventType.Marriage && e.Event.Date.Type == DateRangeType.Date)))
+        .Select(i => new {
+          Sex = i.Individual.Sex,
+          BirthYear = i.Individual.BirthDate.Start.Year,
+          MarriageAge = i.Individual.BirthDate.TryGetDiff(i.Families.Select(f => f.Events.First(e => e.Event.Type == EventType.Marriage).Event.Date)
+            .OrderBy(d => d)
+            .First(), out var min, out var max) ? min.Years : -1
+        })
+        .Where(d => d.MarriageAge >= 0)
+        .GroupBy(i => i.Sex)
+        .Select((g, i) => new Dictionary<string, object>()
+        {
+          { "label", g.Key.ToString() },
+          { "data", g.Select(v => new Dictionary<string, object>()
+          {
+            { "x", v.BirthYear },
+            { "y", v.MarriageAge }
+          }) },
+          { "backgroundColor", ReportStyle.Default.Colors[i] }
+        })
+        .ToList();
+      WriteChart(html, state, marriageAges, _root.Id.Primary + "_marriageAge", "Birth Year", "Age of first marriage (Years)", "Marriage age by birth year.");
+    }
+
+    private void WriteChart(HtmlTextWriter html, RenderState state, List<Dictionary<string, object>> data, string id, string xTitle, string yTitle, string caption)
+    {
+      if (data.Count > 0)
       {
-        if (country.Color == "white")
+        var config = new Dictionary<string, object>()
         {
-          html.WriteStartElement("span");
-          var style = $"display:inline-block;width:1em;height:1em;text-align:center;";
-          html.WriteAttributeString("style", style);
-          html.WriteString("?");
-          html.WriteEndElement();
-        }
-        else
-        {
-          html.WriteStartElement("span");
-          var style = $"display:inline-block;width:1em;height:1em;background:{country.Color}";
-          html.WriteAttributeString("style", style);
-          html.WriteEndElement();
-        }
-        html.WriteString(" " + country.Name);
-        var percent = country.Percentage.ToString("0.0%");
-        if (percent != "0.0%")
-          html.WriteString($" ({percent})");
+          { "type", "scatter" },
+          { "data", new Dictionary<string, object>() {
+            { "datasets", data }
+          } },
+          { "options", new Dictionary<string, object> {
+            { "scales", new Dictionary<string, object> {
+              { "x", new Dictionary<string, object> {
+                { "display", true },
+                { "title", new Dictionary<string, object> {
+                  { "display", true },
+                  { "text", xTitle },
+                } }
+              } },
+              { "y", new Dictionary<string, object> {
+                { "display", true },
+                { "title", new Dictionary<string, object> {
+                  { "display", true },
+                  { "text", yTitle },
+                } }
+              } }
+            } }
+          } }
+        };
+
+        html.WriteStartElement("figure");
+        html.WriteStartElement("canvas");
+        html.WriteAttributeString("style", "width:7in;height:3in;");
+        html.WriteAttributeString("id", id);
+        html.WriteEndElement();
+        state.Scripts.Add($@"class chart{id} extends Paged.Handler {{
+  constructor(chunker, polisher, caller) {{
+    super(chunker, polisher, caller);
+  }}
+
+  afterRendered(pages) {{
+    new Chart(document.getElementById('{id}'), {JsonSerializer.Serialize(config)})
+    return Promise.resolve(true);
+  }}
+}}
+Paged.registerHandlers(chart{id});");
+        html.WriteElementString("figcaption", caption);
+        html.WriteEndElement();
       }
+    }
+
+    private void WriteMedicalTable(HtmlTextWriter html, ReportRenderer renderer)
+    {
+      var birthFamily = renderer.Families
+        .FirstOrDefault(f => f.Members.Any(m => m.Individual == _root && m.Role == FamilyLinkType.Birth));
+
+      html.WriteStartElement("table");
+      html.WriteAttributeString("style", "break-inside:avoid;margin:1em 0;");
+      html.WriteElementString("caption", "Family Medical History");
+      html.WriteStartElement("tr");
+
+      html.WriteStartElement("td");
+      html.WriteAttributeString("style", "vertical-align:top");
+      WritePersonMedical(html, _root, "Primary", true);
+      WriteSiblings(html, _root, birthFamily, "Sibling");
+      html.WriteEndElement();
+
+      var parentFamilies = new List<(string, ResolvedFamily)>();
+      if (birthFamily != null
+        && birthFamily.Parents.Any())
+      {
+        html.WriteStartElement("td");
+        html.WriteAttributeString("style", "vertical-align:top");
+        foreach (var parent in birthFamily.Parents.OrderBy(p => p.Sex == Sex.Male ? 0 : 1))
+        {
+          var role = parent.Sex == Sex.Female ? "Mother" : "Father";
+          WritePersonMedical(html, parent, role, true);
+          var parentFamily = renderer.Families
+            .FirstOrDefault(f => f.Members.Any(m => m.Individual == parent && m.Role == FamilyLinkType.Birth));
+          WriteSiblings(html, parent, parentFamily, role + "'s Sibling");
+          if (parentFamily != null)
+            parentFamilies.Add((role, parentFamily));
+        }
+        html.WriteEndElement();
+      }
+
+      if (parentFamilies.Count > 0)
+      {
+        html.WriteStartElement("td");
+        html.WriteAttributeString("style", "vertical-align:top");
+        foreach (var family in parentFamilies)
+        {
+          foreach (var parent in family.Item2.Parents.OrderBy(p => p.Sex == Sex.Male ? 0 : 1))
+          {
+            var role = family.Item1 + "'s " + (parent.Sex == Sex.Female ? "Mother" : "Father");
+            WritePersonMedical(html, parent, role, true);
+          }
+        }
+        html.WriteEndElement();
+      }
+
       html.WriteEndElement();
       html.WriteEndElement();
+    }
+
+    private void WriteSiblings(HtmlTextWriter html, Individual root, ResolvedFamily family, string role)
+    {
+      if (family == null)
+        return;
+
+      foreach (var sibling in family.Members
+        .Where(m => m.Individual != root && m.Role == FamilyLinkType.Birth)
+        .OrderBy(m => m.Order))
+        WritePersonMedical(html, sibling.Individual, role);
+    }
+
+    private static Dictionary<string, string> _keyMetrics = new Dictionary<string, string>()
+    {
+      { "height", "Height: " },
+      { "weight", "Weight: " },
+      { "eye_color", "Eye Color: " },
+      { "blood_type", "Blood Type: " },
+    };
+
+    private void WritePersonMedical(HtmlTextWriter html, Individual individual, string relation, bool emphasis = false)
+    {
+      html.WriteStartElement("div");
+      if (emphasis)
+        html.WriteAttributeString("style", "font-weight: bold;");
+      html.WriteElementString("u", relation);
+      html.WriteString(": " + individual.Name.Name);
+      html.WriteEndElement();
+
+      html.WriteStartElement("ul");
+      html.WriteAttributeString("style", "padding-inline-start:1em;margin-block-start:0;");
+      if (individual.BirthDate.HasValue || individual.DeathDate.HasValue)
+      {
+        html.WriteStartElement("li");
+        html.WriteString(individual.DateString);
+        if (individual.BirthDate.Type == DateRangeType.Date
+          && individual.DeathDate.Type == DateRangeType.Date)
+        {
+          html.WriteString(ParagraphBuilder.GetAge(individual, individual.DeathDate, false));
+        }
+        html.WriteEndElement();
+      }
+
+      foreach (var metric in _keyMetrics)
+      {
+        if (individual.Attributes.TryGetValue(metric.Key, out var value))
+        {
+          html.WriteStartElement("li");
+          html.WriteElementString("i", metric.Value);
+          html.WriteString(value);
+          html.WriteEndElement();
+        }
+      }
+
+      var events = individual.Events
+        .Where(e => e.TypeName == "Diagnosis")
+        .Select(e => {
+          var result = new ResolvedEvent(e);
+          result.Primary.Add(individual);
+          return result;
+        })
+        .ToList();
+      var hasCause = true;
+      if (!(individual.DeathDate.HasValue
+        && individual.Events.FirstOrDefault(e => e.Type == EventType.Death).Attributes.TryGetValue("Cause", out var deathCause)))
+      {
+        hasCause = false;
+        deathCause = null;
+      }
+
+      if (events.Count > 0 || hasCause)
+      {
+        html.WriteStartElement("li");
+        var builder = new ParagraphBuilder()
+        {
+          PreviousSubject = new[] { individual }
+        };
+        foreach (var ev in events)
+          builder.WriteEvent(html, ev, true);
+        if (hasCause)
+          html.WriteString($" The cause of death was {deathCause}.");
+        html.WriteEndElement();
+      }
 
       html.WriteEndElement();
     }

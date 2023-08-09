@@ -42,7 +42,7 @@ namespace GedcomParser
       html.WriteStartElement("html");
       html.WriteStartElement("head");
       html.WriteElementString("style", @"body {
-  font-family: Lora, serif;
+  font-family: Lora, Garamond, serif;
   font-size: 10pt;
 }
 h1, h2, h3, h4, h5, h6 {
@@ -60,11 +60,11 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 1in;
   font-weight: bold;
 }
-h1 {
-  font-size: 
+h2 {
+  string-set: title content(text);
 }
 main {
-  max-width: 7.5in;
+  max-width: 7.25in;
   margin: 0 auto;
 }
 main p {
@@ -92,7 +92,8 @@ img.grayscale {
   justify-content:space-between;
   align-items:center;
 }
-figcaption {
+figcaption,
+caption {
   font-style: italic;
 }
 .person-index {
@@ -191,6 +192,10 @@ aside {
   content: "", page "" target-counter(attr(href url), page);
 }
 
+.toc, .title-page {
+  page: frontMatter
+}
+
 @media screen {
   .pagedjs_page {
     border: 1px solid #ccc !important;
@@ -200,22 +205,30 @@ aside {
 @media print {
   @page {
     size: letter;
-    margin: 0.75in 0.5in;
+    margin: 0.5in 0.5in 1in 0.5in;
+  }
+
+  @page {
+    @bottom-center {
+      content: string(title);
+    }
   }
 
   @page:left {
+    margin-right: 0.625in;
     @bottom-left {
       content: counter(page);
     }
   }
 
   @page:right {
+    margin-left: 0.625in;
     @bottom-right {
       content: counter(page);
     }
   }
 
-  @page:first {
+  @page frontMatter {
     @bottom-left {
       content: none
     }
@@ -225,8 +238,12 @@ aside {
   }
 }");
       html.WriteStartElement("script");
+      html.WriteAttributeString("src", "https://cdn.jsdelivr.net/npm/chart.js");
+      html.WriteEndElement();
+      html.WriteStartElement("script");
       html.WriteAttributeString("src", "https://unpkg.com/pagedjs/dist/paged.polyfill.js");
       html.WriteEndElement();
+      
       html.WriteEndElement();
       html.WriteStartElement("body");
       html.WriteStartElement("main");
@@ -287,6 +304,10 @@ aside {
         section.Render(html, this, state);
       
       html.WriteEndElement();
+
+      if (state.Scripts.Count > 0)
+        html.WriteElementString("script", string.Join("\r\n", state.Scripts));
+      
       html.WriteEndElement();
       html.WriteEndElement();
     }

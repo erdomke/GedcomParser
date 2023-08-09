@@ -13,10 +13,10 @@ namespace GedcomParser.Renderer
   internal class ParagraphBuilder
   {
     private HashSet<string> _existingReferences = new HashSet<string>();
-    private IEnumerable<Individual> _previousSubject;
     private bool _previousSubjectIsFamily = false;
     private bool _inParagraph = false;
 
+    public IEnumerable<Individual> PreviousSubject { get; set; }
     public bool IncludeBurialInformation { get; set; } = true;
     public bool IncludeAges { get; set; } = true;
     public SourceListSection SourceList { get; set; }
@@ -26,7 +26,7 @@ namespace GedcomParser.Renderer
     public void StartParagraph(HtmlTextWriter html)
     {
       html.WriteStartElement("p");
-      _previousSubject = null;
+      PreviousSubject = null;
       _previousSubjectIsFamily = false;
       _existingReferences.Clear();
       _inParagraph = false;
@@ -388,7 +388,7 @@ namespace GedcomParser.Renderer
 
     private void SetSubject(IEnumerable<Individual> individuals, bool isFamily)
     {
-      _previousSubject = individuals;
+      PreviousSubject = individuals;
       _previousSubjectIsFamily = isFamily;
     }
 
@@ -474,10 +474,10 @@ namespace GedcomParser.Renderer
 
       if (nameForm.HasFlag(NameForm.Pronoun))
       {
-        var matchCount = _previousSubject == null ? 0 : individuals.Intersect(_previousSubject).Count();
+        var matchCount = PreviousSubject == null ? 0 : individuals.Intersect(PreviousSubject).Count();
         if (matchCount > 0
           && !ageDate.HasValue
-          && matchCount == _previousSubject.Count()
+          && matchCount == PreviousSubject.Count()
           && matchCount == individuals.Count())
         {
           if (_previousSubjectIsFamily)
@@ -508,7 +508,7 @@ namespace GedcomParser.Renderer
         html.WriteAttributeString("href", "#" + individual.Id.Primary);
 
         var firstUsage = _existingReferences.Add(individual.Id.Primary);
-        if (firstUsage && DirectAncestors.Contains(individual.Id.Primary))
+        if (firstUsage && DirectAncestors?.Contains(individual.Id.Primary) == true)
           html.WriteAttributeString("style", "font-weight:bold");
 
         if (nameForm.HasFlag(NameForm.Auto))
@@ -574,7 +574,7 @@ namespace GedcomParser.Renderer
       }
     }
 
-    private static string GetAge(Individual i, ExtendedDateRange dateTime, bool useMax)
+    internal static string GetAge(Individual i, ExtendedDateRange dateTime, bool useMax)
     {
       var birth = i.Events.FirstOrDefault(e => e.Type == EventType.Birth && e.Date.HasValue);
       if (birth != null && dateTime.HasValue

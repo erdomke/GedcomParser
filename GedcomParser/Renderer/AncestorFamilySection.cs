@@ -69,7 +69,7 @@ namespace GedcomParser
           Graphics = renderer.Graphics
         };
         var svg = ancestorRenderer.Render();
-        svg.SetAttributeValue("style", "max-width:7.5in;max-height:8in");
+        svg.SetAttributeValue("style", $"max-width:{ReportStyle.Default.PageWidthInches}in;max-height:8in");
         svg.WriteTo(html);
         html.WriteEndElement();
 
@@ -118,7 +118,7 @@ namespace GedcomParser
 
         html.WriteEndElement();
 
-        DescendentFamilySection.RenderGallery(html, group.Families
+        GalleryRenderer.Render(html, group.Families
           .SelectMany(f => f.Media
             .Concat(f.Events
               .Where(e => e.Event.Type != EventType.Death)

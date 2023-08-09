@@ -181,7 +181,7 @@ namespace GedcomParser
           map.SetAttributeValue("viewBox", $"{newViewPort.Left} {newViewPort.Top} {newViewPort.Width} {newViewPort.Height}");
           map.SetAttributeValue("width", newViewPort.Width);
           map.SetAttributeValue("height", newViewPort.Height);
-          map.SetAttributeValue("style", "max-width:7.5in");
+          map.SetAttributeValue("style", $"max-width:{ReportStyle.Default.PageWidthInches}in");
 
           figure = new MapFigure()
           {
