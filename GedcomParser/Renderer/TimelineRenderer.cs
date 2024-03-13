@@ -260,11 +260,11 @@ namespace GedcomParser.Renderer
           || e.Type == EventType.Burial);
 
         Name = individual.Name.Name.ToString();
-        BirthDate = individual.BirthDate.ToString("s");
+        BirthDate = individual.BirthDate.ToString("yyyy-M-d");
         if (deathFound)
         {
           if (individual.DeathDate.HasValue)
-            DeathDate = individual.DeathDate.ToString("s");
+            DeathDate = individual.DeathDate.ToString("yyyy-M-d");
           else
             DeathDate = "Deceased";
         }

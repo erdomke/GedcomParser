@@ -333,7 +333,8 @@ namespace GedcomParser
 
       foreach (var family in Families)
       {
-        var allEvents = ResolvedEventGroup.Group(family.Events);
+        var exact = family.Family.Attributes.TryGetValue("Exact", out var exactStr) && bool.Parse(exactStr);
+        var allEvents = ResolvedEventGroup.Group(family.Events, exact);
 
         paraBuilder.StartParagraph(html);
         foreach (var ev in allEvents)

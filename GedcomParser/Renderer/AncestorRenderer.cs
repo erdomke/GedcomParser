@@ -320,7 +320,7 @@ namespace GedcomParser
           Individual = i,
           Families = renderer.Families.Where(f => f.Parents.Contains(i)).ToList()
         })
-        .Where(i => i.Families.All(f => f.Events.Any(e => e.Event.Type == EventType.Marriage && e.Event.Date.Type == DateRangeType.Date)))
+        .Where(i => i.Families.Count > 0 && i.Families.All(f => f.Events.Any(e => e.Event.Type == EventType.Marriage && e.Event.Date.Type == DateRangeType.Date)))
         .Select(i => new {
           Sex = i.Individual.Sex,
           BirthYear = i.Individual.BirthDate.Start.Year,

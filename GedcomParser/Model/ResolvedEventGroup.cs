@@ -7,13 +7,15 @@ namespace GedcomParser.Model
   internal class ResolvedEventGroup
   {
     public List<ResolvedEvent> Events { get; }
+    public bool Exact { get; }
 
-    public ResolvedEventGroup(IEnumerable<ResolvedEvent> events)
+    public ResolvedEventGroup(IEnumerable<ResolvedEvent> events, bool exact)
     {
       Events = events.ToList();
+      Exact = exact;
     }
 
-    public static IList<ResolvedEventGroup> Group(IEnumerable<ResolvedEvent> events)
+    public static IList<ResolvedEventGroup> Group(IEnumerable<ResolvedEvent> events, bool exact)
     {
       var result = events
         .Where(e => (e.Event.Type != EventType.Generic
@@ -40,7 +42,10 @@ namespace GedcomParser.Model
           else
             return Guid.NewGuid().ToString("N");
         })
-        .Select(g => new ResolvedEventGroup(g.OrderBy(e => e.PrimaryOrder).ThenBy(e => e.Event.Date)))
+        .Select(g => new ResolvedEventGroup(
+          g.OrderBy(e => e.PrimaryOrder).ThenBy(e => e.Event.Date),
+          g.Any(e => e.Event.Type == EventType.Birth) ? exact : false
+        ))
         .Where(g => g.Events.Any(e => e.Event.Date.HasValue || e.Event.Type == EventType.Birth))
         .OrderBy(g => g.Events.FirstOrDefault(e => e.Event.Date.HasValue)?.Event.Date)
         .ToList();

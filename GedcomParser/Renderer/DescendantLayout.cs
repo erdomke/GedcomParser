@@ -291,9 +291,9 @@ namespace GedcomParser
           _lines.Add(Measure(name.Name.Trim(), graphics, style, style.BaseFontSize));
         }
         if (individual.BirthDate.HasValue)
-          _lines.Add(Measure("B: " + individual.BirthDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
+          _lines.Add(Measure("B: " + individual.BirthDate.ToString("yyyy-M-d"), graphics, style, style.BaseFontSize - 4));
         if (individual.DeathDate.HasValue)
-          _lines.Add(Measure("D: " + individual.DeathDate.ToString("s"), graphics, style, style.BaseFontSize - 4));
+          _lines.Add(Measure("D: " + individual.DeathDate.ToString("yyyy-M-d"), graphics, style, style.BaseFontSize - 4));
         else if (individual.Events.Any(e => e.Type == EventType.Death || e.Type == EventType.Burial))
           _lines.Add(Measure("Deceased", graphics, style, style.BaseFontSize - 4));
         Height = _lines.Select(l => l.Item2.Height).Append(_imageSize.Height).Sum();

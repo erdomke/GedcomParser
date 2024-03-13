@@ -54,9 +54,9 @@ namespace GedcomParser.Renderer
         AddNames(html, births.First().Secondary, NameForm.AutoName, births.Count > 1 ? default : births.First().Event.Date);
         SetSubject(births.First().Secondary, true);
         if (births.Any(e => e.Event.Type == EventType.Adoption))
-          html.WriteString(" adopted at least ");
+          html.WriteString(" adopted " + (eventGroup.Exact ? "" : "at least "));
         else
-          html.WriteString(" gave birth to at least ");
+          html.WriteString(" gave birth to " + (eventGroup.Exact ? "" : "at least "));
         
         html.WriteString(ChildWord(births.SelectMany(e => e.Primary)));
         html.WriteString(" — ");

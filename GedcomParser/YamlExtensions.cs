@@ -17,6 +17,8 @@ namespace GedcomParser
         else
           return null;
       }
+      else if (node is YamlScalarNode scalar && scalar.Value == "null")
+        return null;
       else if (node == null)
         return null;
       throw new InvalidOperationException("The node is not a mapping node.");
