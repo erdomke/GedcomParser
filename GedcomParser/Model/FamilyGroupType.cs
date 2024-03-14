@@ -10,6 +10,7 @@ namespace GedcomParser.Model
   {
     Descendants,
     DescendantHighlights,
-    Ancestors
+    Ancestors,
+    Appendix
   }
 }

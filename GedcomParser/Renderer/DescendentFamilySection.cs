@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using System.Xml.Linq;
-using static Microsoft.Msagl.Layout.Incremental.KDTree;
 
 namespace GedcomParser
 {
@@ -30,7 +29,7 @@ namespace GedcomParser
       _sourceList = sourceList;
     }
 
-    public static IEnumerable<IFamilySection> Create(IEnumerable<ResolvedFamily> resolvedFamilies, IEnumerable<FamilyGroup> groups, SourceListSection sourceList)
+    public static IEnumerable<ISection> Create(IEnumerable<ResolvedFamily> resolvedFamilies, IEnumerable<FamilyGroup> groups, SourceListSection sourceList)
     {
       var xref = new Dictionary<string, ResolvedFamily>();
       foreach (var family in resolvedFamilies)
@@ -45,11 +44,15 @@ namespace GedcomParser
           
           if (g.Type == FamilyGroupType.Ancestors)
           {
-            return (IFamilySection)new AncestorFamilySection(g.Title, g.Ids, sourceList)
+            return (ISection)new AncestorFamilySection(g.Title, g.Ids, sourceList)
             {
               StartDate = g.TopicDate,
               Media = g.Media
             };
+          }
+          else if (g.Type == FamilyGroupType.Appendix)
+          {
+            return new AppendixSection(g, sourceList);
           }
           else
           {
@@ -119,7 +122,10 @@ namespace GedcomParser
           section.StartDate = section.Groups.Min(g => g.Families.First().StartDate);
       }
 
-      return result.OrderByDescending(g => g.StartDate).ToList();
+      return result
+        .OrderByDescending(g => g is IFamilySection familySection ? familySection.StartDate : new ExtendedDateTime(DateTime.MinValue))
+        .ThenBy(g => g.Title)
+        .ToList();
     }
 
     internal static void RenderIntro(IFamilySection section, HtmlTextWriter html, ReportRenderer renderer, SourceListSection sourceList)
